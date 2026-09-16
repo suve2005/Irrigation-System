@@ -1,0 +1,3 @@
+{"sessionId":"e1e026","location":"completionProvider.ts:provideCompletionItems","message":"completion invoked","data":{"languageId":"sql","linePrefix":") default charset utf8 comment '';a","uri":"Untitled-2"},"hypothesisId":"F","timestamp":1789404062532}
+{"sessionId":"e1e026","location":"atMentionChain.ts:getComplection","message":"mention parse","data":{"offset":261,"engine":"mysql","mention":null,"sqlTail":"harset utf8 comment '';a"},"hypothesisId":"D","timestamp":1789404062535}
+{"sessionId":"e1e026","location":"favoriteCommandsIndex.ts:_loadCommands","message":"autocomplete index loaded","data":{"mysqlCount":889,"pgCount":250,"sqliteCount":250,"total":1563,"topMysql":75,"topPg":64,"topSqlite":35},"hypothesisId":"A","timestamp":1789404062572}
