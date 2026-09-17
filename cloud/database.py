@@ -4,8 +4,8 @@ import mysql.connector
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
-    "password": "SUVEthican2005",
-    "database": "irrigation_system"
+    "password": "MA11nivannan",
+    "database": "irrigation_db"
 }
 
 def get_db_connection():
