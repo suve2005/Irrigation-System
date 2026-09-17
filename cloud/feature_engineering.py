@@ -23,9 +23,55 @@ def fetch_weather_api(lat, lon, target_date):
         return {"temp_max": 30.0, "temp_min": 22.0, "rh": 75.0, "wind_speed": 2.5, "solar_rad": 15.0, "precip": 0.0}
 
 def fetch_spatial_api(lat, lon):
-    """Wrapper for SoilGrids API."""
-    # Placeholder for standard SoilGrids REST implementation
-    return {"sand_pct": 45.0, "clay_pct": 25.0}
+    """Wrapper for ISRIC SoilGrids REST API."""
+    # This endpoint specifically requests sand and clay data for the 0-5cm depth layer
+    url = f"https://rest.isric.org/soilgrids/v2.0/properties/query?lon={lon}&lat={lat}&property=sand&property=clay&depth=0-5cm&value=mean"
+    
+    try:
+        response = requests.get(url, timeout=10).json()
+        
+        # Setting our fallbacks just in case the extraction fails
+        sand_val = 45.0
+        clay_val = 25.0
+        
+        # SoilGrids nests its data inside 'properties' -> 'layers'
+        for layer in response.get('properties', {}).get('layers', []):
+            name = layer.get('name')
+            # SoilGrids returns these values in grams per kilogram. Dividing by 10 gives us the percentage.
+            mean_value = layer.get('depths', [{}])[0].get('values', {}).get('mean', 0) / 10.0
+            
+            if name == 'sand':
+                sand_val = mean_value
+            elif name == 'clay':
+                clay_val = mean_value
+                
+        return {"sand_pct": sand_val, "clay_pct": clay_val}
+        
+    except Exception as e:
+        print(f"[API ERROR] SoilGrids extraction failed: {e}")
+        # Return fallback values so the pipeline doesn't crash
+        return {"sand_pct": 45.0, "clay_pct": 25.0}
+
+def fetch_elevation_api(lat, lon):
+    """Wrapper for Google Maps Elevation API."""
+    # Put your actual API key inside these quotes
+    ELEVATION_API_KEY = "b7ffa9a639148b1975d19bc41f0b9eab" 
+    
+    url = f"https://maps.googleapis.com/maps/api/elevation/json?locations={lat},{lon}&key={ELEVATION_API_KEY}"
+    
+    try:
+        response = requests.get(url, timeout=10).json()
+        
+        # Google returns a "status" field we should check
+        if response.get('status') == 'OK':
+            return float(response['results'][0]['elevation'])
+        else:
+            print(f"[API ERROR] Google Elevation failed with status: {response.get('status')}")
+            return 10.0  # Fallback elevation
+            
+    except Exception as e:
+        print(f"[API ERROR] Network failure when fetching elevation: {e}")
+        return 10.0  # Fallback elevation
 
 def fetch_elevation_api(lat, lon):
     """Wrapper for OpenTopoData API (Free DEM alternative)."""
