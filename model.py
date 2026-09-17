@@ -1,52 +1,70 @@
-# model.py
 import pandas as pd
-import warnings
+import numpy as np
 import torch
+import gc
 from database import get_db_connection
-from tabpfn import TabPFNClassifier
-
-# Hide the Pandas SQL warning to keep the terminal clean
-warnings.filterwarnings('ignore', category=UserWarning)
+from tabpfn import TabPFNRegressor
 
 def run_inference_from_db(target_date):
-    """
-    Step 3: Fetch engineered features from DB, run TabPFN, log prediction.
-    """
     db = get_db_connection()
     
-    # Request data from the database (Table) instead of feature engineering
-    query = "SELECT eto, dap, kc, depletion_ratio_measured FROM daily_analytics"
+    # FETCH DATA
+    query = "SELECT analytics_id, eto, dap, kc, depletion_ratio_measured, target_water_mm FROM daily_analytics"
     df = pd.read_sql(query, db)
-    
-    if df.empty or len(df) < 100:
-        print("[MODEL] Not enough historical data in DB for TabPFN.")
-        db.close()
-        return
-
-    # Prepare Context (Historical) vs Current Row (Target Date)
-    X = df.drop(columns=['target_irrigate'], errors='ignore')
-    # Synthetic target for the sake of the pipeline
-    y = (df['depletion_ratio_measured'] > 0.5).astype(int) 
-
-    X_train = X.iloc[:-1] # History
-    y_train = y.iloc[:-1]
-    X_today = X.iloc[[-1]] # Latest row fetched from DB
-
-    # Run Model - Removed N_ensemble to fix the TypeError
-    classifier = TabPFNClassifier(device='cuda')
-    classifier.fit(X_train, y_train)
-    
-    # Predict probability for class 1 (Irrigate)
-    probability = classifier.predict_proba(X_today)[0][1]
-    decision = 1 if probability > 0.7 else 0
-    
-    # Save Prediction to DB
-    cursor = db.cursor()
-    cursor.execute(
-        "INSERT INTO prediction (probability, decision, model_version) VALUES (%s, %s, %s)",
-        (float(probability), decision, "tabpfn-v1")
-    )
-    db.commit()
     db.close()
     
-    print(f"[MODEL] Inference complete. Probability: {probability:.2f} | Decision: {decision}")
+    # Keep the last 1000 rows to optimize VRAM
+    df = df.tail(1000).reset_index(drop=True)
+    
+    if df.empty or len(df) < 50:
+        print("[MODEL] Not enough data in database.")
+        return
+
+    # PREPARE DATA - Convert to float32 for CUDA compatibility
+    X = df[['eto', 'dap', 'kc', 'depletion_ratio_measured']].astype(np.float32)
+    y = df['target_water_mm'].astype(np.float32)
+
+    X_train = X.iloc[:-1].values
+    y_train = y.iloc[:-1].values
+    X_today = X.iloc[[-1]].values
+    current_analytics_id = int(df.iloc[-1]['analytics_id'])
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"[MODEL] Executing inference on device: {device.upper()}")
+    
+    if device == 'cuda':
+        torch.cuda.empty_cache()
+
+    regressor = None
+    try:
+        # FIXED: Removed N_ensemble parameter
+        regressor = TabPFNRegressor(device=device)
+        regressor.fit(X_train, y_train)
+        
+        water_needed_mm = float(regressor.predict(X_today)[0])
+        water_needed_mm = max(0.0, round(water_needed_mm, 2))
+        
+        # Calculate pump run time (10 m² plot, 5 L/min pump)
+        water_liters = water_needed_mm * 10
+        run_time_min = int(water_liters / 5)
+
+        # WRITE PREDICTION TO DB
+        db_write = get_db_connection()
+        cursor = db_write.cursor()
+        cursor.execute(
+            "INSERT INTO prediction (plot_id, analytics_id, water_needed_mm, pump_run_time_min, model_version) VALUES (1, %s, %s, %s, %s)",
+            (current_analytics_id, water_needed_mm, run_time_min, "tabpfn-reg-v1")
+        )
+        db_write.commit()
+        cursor.close()
+        db_write.close()
+        
+        print(f"[MODEL SUCCESS] Water needed: {water_needed_mm} mm. Pump run time: {run_time_min} mins.")
+        
+    finally:
+        # Safe cleanup block
+        if regressor is not None:
+            del regressor
+        if device == 'cuda':
+            torch.cuda.empty_cache()
+        gc.collect()
