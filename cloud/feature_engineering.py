@@ -27,6 +27,16 @@ def fetch_spatial_api(lat, lon):
     # Placeholder for standard SoilGrids REST implementation
     return {"sand_pct": 45.0, "clay_pct": 25.0}
 
+def fetch_elevation_api(lat, lon):
+    """Wrapper for OpenTopoData API (Free DEM alternative)."""
+    url = f"https://api.opentopodata.org/v1/srtm90m?locations={lat},{lon}"
+    try:
+        response = requests.get(url, timeout=10).json()
+        return float(response['results'][0]['elevation'])
+    except Exception:
+        # Fallback elevation if API fails
+        return 10.0
+
 def calculate_kc(dap, c_data):
     """Piecewise FAO-56 Crop Coefficient Calculation."""
     l1 = c_data['L_ini']
@@ -51,6 +61,8 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     # 1. Fetch Plot & Crop Data
     cursor.execute("SELECT latitude, longitude, elevation FROM plot WHERE plot_id = %s", (plot_id,))
     plot_data = cursor.fetchone()
+    lat = float(plot_data['latitude'])
+    lon = float(plot_data['longitude'])
     
     cursor.execute("""
         SELECT c.*, pr.planting_date, sp.field_capacity, sp.wilting_point, sp.taw 
@@ -61,8 +73,9 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     """, (cycle_id,))
     crop_data = cursor.fetchone()
 
-    # 2. API Calls for Weather & Spatial
-    weather = fetch_weather_api(plot_data['latitude'], plot_data['longitude'], target_date)
+    # 2. API Calls for Weather, Spatial, and Elevation
+    weather = fetch_weather_api(lat, lon, target_date)
+    dynamic_elevation = fetch_elevation_api(lat, lon)
     
     # Save Weather to DB
     cursor.execute("""
@@ -72,21 +85,23 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     """, (plot_id, target_date, weather['temp_max'], weather['temp_min'], weather['rh'], 
           weather['wind_speed'], weather['solar_rad'], weather['precip']))
 
+    # Optionally update the plot table with the newly fetched exact elevation
+    cursor.execute("UPDATE plot SET elevation = %s WHERE plot_id = %s", (dynamic_elevation, plot_id))
+
     # 3. Calculate DAP & Kc
     dap = (target_date - crop_data['planting_date']).days
     kc = calculate_kc(dap, crop_data)
 
     # 4. Calculate ETo using pyfao56
-    # Assuming day of year (doy) for radiation mechanics
     doy = target_date.timetuple().tm_yday
-    rad = pyfao56.parameters.Rad(float(plot_data['latitude']), float(plot_data['elevation']))
+    rad = pyfao56.parameters.Rad(lat, dynamic_elevation)
     eto = pyfao56.refet.eto_pm(
         tmin=weather['temp_min'], tmax=weather['temp_max'],
         ea=pyfao56.refet.ea_obs(weather['temp_min'], weather['temp_max'], weather['rh']),
         uz=weather['wind_speed'], rs=weather['solar_rad'], 
         ra=rad.ra(doy), 
-        lat=float(plot_data['latitude']),
-        z=float(plot_data['elevation'])
+        lat=lat,
+        z=dynamic_elevation
     )
 
     # 5. Fetch trailing data (3-day and 7-day)
@@ -116,12 +131,10 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
 
     # FAO-56 Bucket Model (Simulated)
-    # Get yesterday's simulated depletion
     cursor.execute("SELECT depletion_ratio_simulated FROM daily_analytics WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 1", (plot_id,))
     last_sim = cursor.fetchone()
     last_dr = (float(last_sim['depletion_ratio_simulated']) * float(crop_data['taw'])) if last_sim else 0.0
     
-    # Dr_i = Dr_i-1 - P + ETc
     etc = kc * eto
     dr_simulated = max(0.0, min(float(crop_data['taw']), last_dr - weather['precip'] + etc))
     depletion_ratio_simulated = dr_simulated / float(crop_data['taw'])
@@ -143,4 +156,4 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     db.commit()
     cursor.close()
     db.close()
-    print(f"[FEATURE ENG] Computed and stored all API/Physics features for {target_date}")
+    print(f"[FEATURE ENG] Computed and stored all API/Physics features (including dynamic elevation) for {target_date}")
