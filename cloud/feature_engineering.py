@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import requests
 import pyfao56
 
+# have to check the status code before using the JSON files blindly - Valavan
 def fetch_weather_api(lat, lon, target_date):
     """Wrapper for NASA POWER API."""
     date_str = target_date.strftime("%Y%m%d")
@@ -19,7 +20,7 @@ def fetch_weather_api(lat, lon, target_date):
             "precip": response['properties']['parameter']['PRECTOTCORR'][date_str]
         }
     except Exception:
-        # Fallback values if API fails - check this
+        # Fallback values if API fails - check this -Valavan
         return {"temp_max": 30.0, "temp_min": 22.0, "rh": 75.0, "wind_speed": 2.5, "solar_rad": 15.0, "precip": 0.0}
 
 def fetch_spatial_api(lat, lon):
@@ -30,7 +31,7 @@ def fetch_spatial_api(lat, lon):
     try:
         response = requests.get(url, timeout=10).json()
         
-        # Setting our fallbacks just in case the extraction fails - check these values
+        # Setting our fallbacks just in case the extraction fails - check these values-Valavan
         sand_val = 45.0
         clay_val = 25.0
         
@@ -52,9 +53,10 @@ def fetch_spatial_api(lat, lon):
         # Return fallback values so the pipeline doesn't crash
         return {"sand_pct": 45.0, "clay_pct": 25.0}
 
+# there are two functions called elevation need to find the suitbable one.-Valavan
 def fetch_elevation_api(lat, lon):
     """Wrapper for Google Maps Elevation API."""
-    # check for expiry
+    # check for expiry- Valavan
     ELEVATION_API_KEY = "b7ffa9a639148b1975d19bc41f0b9eab" 
     
     url = f"https://maps.googleapis.com/maps/api/elevation/json?locations={lat},{lon}&key={ELEVATION_API_KEY}"
