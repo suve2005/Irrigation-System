@@ -8,10 +8,10 @@ from database import get_db_connection
 def generate_data():
     db = get_db_connection()
     cursor = db.cursor()
-
+    #only daily analytics table is getting filled- valavan
     print("Generating 10,000 rows of analytics...")
     start_date = date(2020, 1, 1)
-
+    # random values creatred for eto,and etc.-valavan
     for i in range(10000):
         current = start_date + timedelta(days=i)
         cursor.execute("""
