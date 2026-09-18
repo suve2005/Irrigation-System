@@ -19,7 +19,7 @@ def fetch_weather_api(lat, lon, target_date):
             "precip": response['properties']['parameter']['PRECTOTCORR'][date_str]
         }
     except Exception:
-        # Fallback values if API fails
+        # Fallback values if API fails - check this
         return {"temp_max": 30.0, "temp_min": 22.0, "rh": 75.0, "wind_speed": 2.5, "solar_rad": 15.0, "precip": 0.0}
 
 def fetch_spatial_api(lat, lon):
@@ -30,7 +30,7 @@ def fetch_spatial_api(lat, lon):
     try:
         response = requests.get(url, timeout=10).json()
         
-        # Setting our fallbacks just in case the extraction fails
+        # Setting our fallbacks just in case the extraction fails - check these values
         sand_val = 45.0
         clay_val = 25.0
         
@@ -54,13 +54,13 @@ def fetch_spatial_api(lat, lon):
 
 def fetch_elevation_api(lat, lon):
     """Wrapper for Google Maps Elevation API."""
-    # Put your actual API key inside these quotes
+    # check for expiry
     ELEVATION_API_KEY = "b7ffa9a639148b1975d19bc41f0b9eab" 
     
     url = f"https://maps.googleapis.com/maps/api/elevation/json?locations={lat},{lon}&key={ELEVATION_API_KEY}"
     
     try:
-        response = requests.get(url, timeout=10).json()
+        response = requests.get(url, timeout=10).json() 
         
         # Google returns a "status" field we should check
         if response.get('status') == 'OK':
