@@ -26,7 +26,7 @@ def simulate_and_send():
         except Exception as e:
             print(f"[ESP32] Network error: {e}")
 
-        time.sleep(10)  # Send data every 10 seconds
+        time.sleep(10)  # Send data every 10 seconds -Valavan
 
 
 if __name__ == "__main__":
