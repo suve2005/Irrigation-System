@@ -2,7 +2,7 @@
 import pandas as pd
 import warnings
 from database import get_db_connection
-from tabpfn import TabPFNClassifier
+from tabpfn import TabPFNClassifier # regression
 
 warnings.filterwarnings('ignore', category=UserWarning)
 
