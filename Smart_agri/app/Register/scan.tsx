@@ -37,7 +37,7 @@ const ScanQRScreen = () => {
     }
 
     // 3. Handle what happens when a QR code is detected
-    const handleBarcodeScanned = ({ type, data }) => {
+    const handleBarcodeScanned = ({ type, data }: { type: string, data: string }) => {
         setScanned(true);
         setSensorId(data); // Save the QR code text (e.g., the sensor serial number)
         console.log(`Scanned QR Type: ${type}, Data: ${data}`);
@@ -47,7 +47,7 @@ const ScanQRScreen = () => {
     const handleContinue = () => {
         // We will create this 'details' page next
         router.push({
-            pathname: '/register/details',
+            pathname: '/Register/details',
             params: { deviceId: sensorId }
         });
     };
@@ -63,18 +63,15 @@ const ScanQRScreen = () => {
 
             {/* Camera Viewport */}
             <View style={styles.cameraContainer}>
-                <CameraView
-                    style={styles.absoluteFillObject}
-                    facing="back"
-                    onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-                    barcodeScannerSettings={{
-                        barcodeTypes: ["qr"], // Only look for QR codes to save battery
-                    }}
-                />
 
                 {/* Visual Overlay to guide the user */}
                 <View style={styles.absoluteFillObject}>
-                    <View style={styles.scanBox} />
+                    <CameraView
+                        style={{ width: '100%', height: '100%', alignContent: "center", padding: 2, borderRadius: 10 }}
+                        facing="back"
+                        onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                    />
+
                 </View>
             </View>
 
@@ -130,11 +127,13 @@ const styles = StyleSheet.create({
         lineHeight: 22,
     },
     cameraContainer: {
-        flex: 1,
-        marginHorizontal: 24,
+        aspectRatio: 1, // Replaces flex: 1 to make it a perfect square
+        width: '100%',
         borderRadius: 24,
-        overflow: 'hidden', // Ensures the camera doesn't bleed outside the rounded corners
-        backgroundColor: '#000',
+        overflow: 'hidden',
+        backgroundColor: '#F8FAF5',
+        alignContent: "center",
+        padding: 20
     },
     absoluteFillObject: {
         // ...StyleSheet.absoluteFillObject,
