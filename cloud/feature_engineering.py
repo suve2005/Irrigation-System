@@ -105,10 +105,10 @@ def calculate_kc(dap, c_data):
 def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date):
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
-
+# all the functions are using fetchone() which gets ony the first row of the given table- this is a problem!!
     # 1. Fetch Plot & Crop Data
     cursor.execute("SELECT latitude, longitude, elevation FROM plot WHERE plot_id = %s", (plot_id,))
-    plot_data = cursor.fetchone()
+    plot_data = cursor.fetchone() 
     lat = float(plot_data['latitude'])
     lon = float(plot_data['longitude'])
     
@@ -119,7 +119,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
         JOIN soil_profile sp ON sp.plot_id = pr.plot_id
         WHERE pr.cycle_id = %s
     """, (cycle_id,))
-    crop_data = cursor.fetchone()
+    crop_data = cursor.fetchone() # contains data for one farm (name, root_depth, kc_mid, planting_date, field_capacity, wilting_poit, taw)
 
     # 2. API Calls for Weather, Spatial, and Elevation
     weather = fetch_weather_api(lat, lon, target_date)
@@ -190,6 +190,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     sim_vs_measured_deviation = depletion_ratio_measured - depletion_ratio_simulated
 
     # 8. Save to Database
+    # depletion_ratio_simulated no need
     insert_query = """
     INSERT INTO daily_analytics 
     (plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc, 
