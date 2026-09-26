@@ -1,17 +1,17 @@
-
 from database import get_db_connection
 from datetime import date, timedelta
 import requests
 import pyfao56
 
-# have to check the status code before using the JSON files blindly - Valavan
 def fetch_weather_api(lat, lon, target_date):
     """Wrapper for NASA POWER API."""
     date_str = target_date.strftime("%Y%m%d")
     url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M_MAX,T2M_MIN,RH2M,WS2M,ALLSKY_SFC_SW_DWN,PRECTOTCORR&community=ag&longitude={lon}&latitude={lat}&start={date_str}&end={date_str}&format=JSON"
     try:
-        response = requests.get(url, timeout=10).json()
-        return {
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()   # raises error for codes 4xx, 5xx. triggers exception
+        response = r.json()
+        weather = {
             "temp_max": response['properties']['parameter']['T2M_MAX'][date_str],
             "temp_min": response['properties']['parameter']['T2M_MIN'][date_str],
             "rh": response['properties']['parameter']['RH2M'][date_str],
@@ -19,9 +19,16 @@ def fetch_weather_api(lat, lon, target_date):
             "solar_rad": response['properties']['parameter']['ALLSKY_SFC_SW_DWN'][date_str],
             "precip": response['properties']['parameter']['PRECTOTCORR'][date_str]
         }
+
+        if weather["rh"] < 0 or weather["temp_max"] < -50 or weather["temp_min"] < -50:
+            raise ValueError("NASA returned -999 missing-data flag")
+        return weather
     except Exception:
-        # Fallback values if API fails - check this -Valavan
-        return {"temp_max": 30.0, "temp_min": 22.0, "rh": 75.0, "wind_speed": 2.5, "solar_rad": 15.0, "precip": 0.0}
+        # using average fall back values from ampara
+        return {
+            "temp_max": 33.5, "temp_min": 24.4, "rh": 76.9,
+            "wind_speed": 3.3, "solar_rad": 19.3, "precip": 0.0, # non-zero mm/day but set to measure as non-rainy day
+        }
 
 def fetch_spatial_api(lat, lon):
     """Wrapper for ISRIC SoilGrids REST API."""
@@ -31,9 +38,8 @@ def fetch_spatial_api(lat, lon):
     try:
         response = requests.get(url, timeout=10).json()
         
-        # Setting our fallbacks just in case the extraction fails - check these values-Valavan
-        sand_val = 45.0
-        clay_val = 25.0
+        sand_val = 35.5
+        clay_val = 35.2
         
         # SoilGrids nests its data inside 'properties' -> 'layers'
         for layer in response.get('properties', {}).get('layers', []):
@@ -51,12 +57,17 @@ def fetch_spatial_api(lat, lon):
     except Exception as e:
         print(f"[API ERROR] SoilGrids extraction failed: {e}")
         # Return fallback values so the pipeline doesn't crash
-        return {"sand_pct": 45.0, "clay_pct": 25.0}
+        # values from Damana, Ampara District, Sri Lanka. 
+        # ISRIC SoilGrids v2.0, 0-5cm mean, Texture: clay loam (35.5% sand, 35.2% clay, 29.3% silt)
+        return {"sand_pct": 35.5, "clay_pct": 35.2}
 
-# there are two functions called elevation need to find the suitbable one.-Valavan
-def fetch_elevation_api(lat, lon):
+# there are two functions called elevation. 
+# google api = more accurate, but is restrictive (limited fetches, expiary....)(kept if wanted to switch)
+# using 2nd one(opentopodata api)
+
+def fetch_elevation_api_google(lat, lon): # Inactive
     """Wrapper for Google Maps Elevation API."""
-    # check for expiry- Valavan
+    # must check for expiry when using
     ELEVATION_API_KEY = "b7ffa9a639148b1975d19bc41f0b9eab" 
     
     url = f"https://maps.googleapis.com/maps/api/elevation/json?locations={lat},{lon}&key={ELEVATION_API_KEY}"
@@ -75,7 +86,7 @@ def fetch_elevation_api(lat, lon):
         print(f"[API ERROR] Network failure when fetching elevation: {e}")
         return 10.0  # Fallback elevation
 
-def fetch_elevation_api(lat, lon):
+def fetch_elevation_api(lat, lon):  #active
     """Wrapper for OpenTopoData API (Free DEM alternative)."""
     url = f"https://api.opentopodata.org/v1/srtm90m?locations={lat},{lon}"
     try:
@@ -190,7 +201,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     sim_vs_measured_deviation = depletion_ratio_measured - depletion_ratio_simulated
 
     # 8. Save to Database
-    # depletion_ratio_simulated no need
+    # depletion_ratio_simulated - kept it here for DB record, removed from model.py 
     insert_query = """
     INSERT INTO daily_analytics 
     (plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc, 
