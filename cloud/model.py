@@ -17,9 +17,9 @@ def run_inference_from_db(target_date):
         print("[MODEL] Not enough historical data in DB for TabPFN. Minimum 100 required.")
         db.close()
         return
-
+   # also remove the depletion_ratio_measured from X which causes the data leakage (already mentioned to remove depletion simulated)
     # Isolate metadata columns
-    metadata_cols = ['recorded_date', 'plot_id']
+    metadata_cols = ['recorded_date', 'plot_id'] # remove feature_id
     
     # Define exactly 28 features Matrix
     X = df.drop(columns=metadata_cols, errors='ignore')
