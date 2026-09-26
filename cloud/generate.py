@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import random
 from database import get_db_connection
 
+# remove the random values
 
 def generate_data():
     db = get_db_connection()
