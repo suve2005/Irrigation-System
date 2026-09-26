@@ -18,8 +18,8 @@ def generate_data():
             INSERT INTO daily_analytics (plot_id, cycle_id, recorded_date, eto, dap, kc, depletion_ratio_measured) 
             VALUES (1, 1, %s, %s, %s, %s, %s)
         """, (current, random.uniform(3, 5), (i % 120) + 1, random.uniform(0.5, 1.1), random.uniform(0.1, 0.9)))
-
-    db.commit()
+   # missing to add  rain_3d_sum, eto_3d_sum, rain_7d_sum, moisture_trend_3d, target_water_mm
+    db.commit() 
     db.close()
     print("Generation complete!")
 
