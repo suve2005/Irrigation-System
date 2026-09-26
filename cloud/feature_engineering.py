@@ -65,28 +65,9 @@ def fetch_spatial_api(lat, lon):
 # google api = more accurate, but is restrictive (limited fetches, expiary....)(kept if wanted to switch)
 # using 2nd one(opentopodata api)
 
-def fetch_elevation_api_google(lat, lon): # Inactive
-    """Wrapper for Google Maps Elevation API."""
-    # must check for expiry when using
-    ELEVATION_API_KEY = "b7ffa9a639148b1975d19bc41f0b9eab" 
-    
-    url = f"https://maps.googleapis.com/maps/api/elevation/json?locations={lat},{lon}&key={ELEVATION_API_KEY}"
-    
-    try:
-        response = requests.get(url, timeout=10).json() 
-        
-        # Google returns a "status" field we should check
-        if response.get('status') == 'OK':
-            return float(response['results'][0]['elevation'])
-        else:
-            print(f"[API ERROR] Google Elevation failed with status: {response.get('status')}")
-            return 10.0  # Fallback elevation
-            
-    except Exception as e:
-        print(f"[API ERROR] Network failure when fetching elevation: {e}")
-        return 10.0  # Fallback elevation
 
-def fetch_elevation_api(lat, lon):  #active
+
+def fetch_elevation_api(lat, lon):  
     """Wrapper for OpenTopoData API (Free DEM alternative)."""
     url = f"https://api.opentopodata.org/v1/srtm90m?locations={lat},{lon}"
     try:
