@@ -105,7 +105,7 @@ def calculate_kc(dap, c_data):
 def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date):
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
-# all the functions are using fetchone() which gets ony the first row of the given table- this is a problem!!
+
     # 1. Fetch Plot & Crop Data
     cursor.execute("SELECT latitude, longitude, elevation FROM plot WHERE plot_id = %s", (plot_id,))
     plot_data = cursor.fetchone() 
