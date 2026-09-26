@@ -64,7 +64,7 @@ const ScanQRScreen = () => {
             } else {
                 // Match found! Proceed to the next step
                 router.push({
-                    pathname: '/register/details',
+                    pathname: '/Register/details',
                     params: { deviceId: sensorId }
                 });
             }
