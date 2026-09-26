@@ -1,4 +1,5 @@
-# model.py
+# model.py 
+from populate_model_features import populate_model_features
 import pandas as pd
 import warnings
 from database import get_db_connection
