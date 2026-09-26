@@ -1,5 +1,5 @@
 # model.py 
-from populate_model_features import populate_model_features
+
 import pandas as pd
 import warnings
 from database import get_db_connection
@@ -11,7 +11,7 @@ def run_inference_from_db(target_date):
     db = get_db_connection()
     
     # Query the comprehensive view containing all 28 features
-    query = "SELECT * FROM model_features_view ORDER BY recorded_date ASC"
+    query = "SELECT * FROM model_features_table ORDER BY recorded_date ASC"
     df = pd.read_sql(query, db)
     
     if df.empty or len(df) < 100:
