@@ -1,7 +1,3 @@
-# schemas.py
-from pydantic import BaseModel
-
-# schemas.py
 from pydantic import BaseModel, Field
 
 class SensorPayload(BaseModel):
