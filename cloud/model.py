@@ -44,7 +44,7 @@ def run_inference_from_db(target_date):
     cursor.execute("SELECT analytics_id FROM daily_analytics WHERE recorded_date = %s ORDER BY analytics_id DESC LIMIT 1", (target_date,))
     analytics_id = cursor.fetchone()['analytics_id']
 
-    # Insert Prediction
+    # Insert Prediction this doesnt include the water_needed_mm, pump_run_time_min,_ model_version,predicted_at
     cursor.execute(
         "INSERT INTO prediction (plot_id, analytics_id, probability, decision, model_version) VALUES (%s, %s, %s, %s, %s)",
         (1, analytics_id, float(probability), decision, "tabpfn-v2-28feat")
