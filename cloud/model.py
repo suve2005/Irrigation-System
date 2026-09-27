@@ -10,9 +10,19 @@ warnings.filterwarnings('ignore', category=UserWarning)
 def run_inference_from_db(target_date):
     db = get_db_connection()
     
-    # Query the comprehensive view containing all 28 features
-    query = "SELECT * FROM model_features_table ORDER BY recorded_date ASC"
+    # Query the feature table, newest first, cap rows so TabPFN stays fast
+    TABPFN_MAX_TRAINING_ROWS = 5000
+
+    # Query the comprehensive table containing all 28 features
+    query = f"""
+        SELECT * FROM model_features_table
+        ORDER BY recorded_date DESC
+        LIMIT {TABPFN_MAX_TRAINING_ROWS}
+    """
     df = pd.read_sql(query, db)
+
+    # Re-sort ascending so X.iloc[-1] is still the latest row
+    df = df.sort_values("recorded_date").reset_index(drop=True)
     
     if df.empty or len(df) < 100:
         print("[MODEL] Not enough historical data in DB for TabPFN. Minimum 100 required.")
