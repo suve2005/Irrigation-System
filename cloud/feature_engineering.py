@@ -20,7 +20,7 @@ def fetch_weather_api(lat, lon, target_date):
             "precip": response['properties']['parameter']['PRECTOTCORR'][date_str]
         }
 
-        if weather["rh"] < 0 or weather["temp_max"] < -50 or weather["temp_min"] < -50:
+        if any(v <= -900 for v in weather.values()):
             raise ValueError("NASA returned -999 missing-data flag")
         return weather
     except Exception:
