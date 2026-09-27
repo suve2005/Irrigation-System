@@ -88,13 +88,14 @@ def run_inference_from_db(target_date):
         pump_run_time_min = 0
 
     # Fixed insertion, now adds these, water_needed_mm, pump_run_time_min, model_version, predicted_at
+    # dropped decisions, predictions are already saved, this is redundent
     cursor.execute("""
         INSERT INTO prediction
-            (plot_id, analytics_id, probability, decision,
-            water_needed_mm, pump_run_time_min, model_version, predicted_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-    """, (1, analytics_id, float(probability), decision,
-        water_needed_mm, pump_run_time_min, "tabpfn-v2-28feat"))
+            (plot_id, analytics_id, probability,
+             water_needed_mm, pump_run_time_min, model_version, predicted_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+    """, (1, analytics_id, float(probability),
+          water_needed_mm, pump_run_time_min, "tabpfn-v2-28feat"))
 
     db.commit()
     db.close()

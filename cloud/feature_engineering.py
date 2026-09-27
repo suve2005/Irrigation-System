@@ -188,6 +188,12 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     cursor.execute("SELECT SUM(precipitation) as rain_7d FROM weather_daily WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 7", (plot_id,))
     rain_7d = cursor.fetchone().get('rain_7d') or 0
 
+    # Clamp values so they fit the existing DECIMAL(5,2) columns (max 999.99)
+    rain_3d = max(0.0, min(float(rain_3d), 999.99))
+    rain_7d = max(0.0, min(float(rain_7d), 999.99))
+    eto     = max(0.0, min(float(eto),     999.99))
+    eto_3d  = max(0.0, min(float(eto_3d),  999.99))
+
     # 6. Fetch Sensor Data for Depletion & Trend
     cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s ORDER BY recorded_at DESC LIMIT 1", (target_date,))
     current_moisture_row = cursor.fetchone()
@@ -196,16 +202,21 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     # fixed memory leak, buffer clears each time
     cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s ORDER BY recorded_at DESC LIMIT 1", (target_date - timedelta(days=3),))
     old_moisture_row = cursor.fetchone()
+
     moisture_trend_3d = (current_vwc - (float(old_moisture_row['soil_moisture_vwc'])/100)) / 3 if old_moisture_row else 0.0
+    moisture_trend_3d = max(-999.99, min(float(moisture_trend_3d), 999.99))
 
     # 7. Depletion Calculations
     dr_measured = (float(crop_data['field_capacity']) - current_vwc) * float(crop_data['root_depth_zr']) * 1000
     depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
 
-    # FAO-56 Bucket Model (Simulated)
+    # changed old FAO-56 Bucket Model (Simulated) 
     cursor.execute("SELECT depletion_ratio_simulated FROM daily_analytics WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 1", (plot_id,))
     last_sim = cursor.fetchone()
-    last_dr = (float(last_sim['depletion_ratio_simulated']) * float(crop_data['taw'])) if last_sim else 0.0
+    if last_sim and last_sim['depletion_ratio_simulated'] is not None:
+        last_dr = float(last_sim['depletion_ratio_simulated']) * float(crop_data['taw'])
+    else:
+        last_dr = 0.0
     
     etc = kc * eto
     dr_simulated = max(0.0, min(float(crop_data['taw']), last_dr - weather['precip'] + etc))
