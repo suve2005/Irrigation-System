@@ -78,21 +78,28 @@ def fetch_elevation_api(lat, lon):
         return 10.0
 
 def calculate_kc(dap, c_data):
-    """Piecewise FAO-56 Crop Coefficient Calculation."""
-    l1 = c_data['L_ini']
-    l2 = l1 + c_data['L_dev']
-    l3 = l2 + c_data['L_mid']
-    l4 = l3 + c_data['L_late']
+    l_ini  = float(c_data['L_ini'])
+    l_dev  = float(c_data['L_dev'])
+    l_mid  = float(c_data['L_mid'])
+    l_late = float(c_data['L_late'])
+    kc_ini = float(c_data['kc_ini'])
+    kc_mid = float(c_data['kc_mid'])
+    kc_end = float(c_data['kc_end'])
+
+    l1 = l_ini
+    l2 = l1 + l_dev
+    l3 = l2 + l_mid
+    l4 = l3 + l_late
 
     if dap <= l1:
-        return float(c_data['kc_ini'])
+        return kc_ini
     elif dap <= l2:
-        return float(c_data['kc_ini'] + ((dap - l1) / c_data['L_dev']) * (c_data['kc_mid'] - c_data['kc_ini']))
+        return kc_ini + ((dap - l1) / l_dev) * (kc_mid - kc_ini)
     elif dap <= l3:
-        return float(c_data['kc_mid'])
+        return kc_mid
     elif dap <= l4:
-        return float(c_data['kc_mid'] + ((dap - l3) / c_data['L_late']) * (c_data['kc_end'] - c_data['kc_mid']))
-    return float(c_data['kc_end'])
+        return kc_mid + ((dap - l3) / l_late) * (kc_end - kc_mid)
+    return kc_end
 
 def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date):
     db = get_db_connection()

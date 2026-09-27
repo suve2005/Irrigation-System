@@ -53,7 +53,7 @@ def generate_data():
         ratio = depletion_mm / taw
 
         # VWC that matches this depletion, as a fraction
-        vwc = float(crop["field_capacity"]) - depletion_mm / (crop["root_depth_zr"] * 1000)
+        vwc = float(crop["field_capacity"]) - depletion_mm / (float(crop["root_depth_zr"]) * 1000)
 
         # --- keep rolling history ---
         rain_hist.append(rain)
