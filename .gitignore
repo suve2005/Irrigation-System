@@ -1,0 +1,4 @@
+cloud/database.py
+# Logs
+*.log
+debug.log

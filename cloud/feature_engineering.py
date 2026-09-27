@@ -1,7 +1,7 @@
 from database import get_db_connection
 from datetime import date, timedelta
 import requests
-import pyfao56
+import math
 
 def fetch_weather_api(lat, lon, target_date):
     """Wrapper for NASA POWER API."""
@@ -139,17 +139,47 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     dap = (target_date - crop_data['planting_date']).days
     kc = calculate_kc(dap, crop_data)
 
-    # 4. Calculate ETo using pyfao56
+    # 4. Calculate ETo using FAO-56 Penman-Monteith (pure Python)
     doy = target_date.timetuple().tm_yday
-    rad = pyfao56.parameters.Rad(lat, dynamic_elevation)
-    eto = pyfao56.refet.eto_pm(
-        tmin=weather['temp_min'], tmax=weather['temp_max'],
-        ea=pyfao56.refet.ea_obs(weather['temp_min'], weather['temp_max'], weather['rh']),
-        uz=weather['wind_speed'], rs=weather['solar_rad'], 
-        ra=rad.ra(doy), 
-        lat=lat,
-        z=dynamic_elevation
+    lat_rad = math.radians(lat)
+    GSC = 0.0820  # MJ m-2 min-1
+
+    # Extraterrestrial radiation Ra (FAO-56 Eq. 21-25)
+    dr = 1 + 0.033 * math.cos(2 * math.pi / 365 * doy)
+    decl = 0.409 * math.sin(2 * math.pi / 365 * doy - 1.39)
+    ws = math.acos(max(-1.0, min(1.0, -math.tan(lat_rad) * math.tan(decl))))
+    Ra = (24 * 60 / math.pi) * GSC * dr * (
+        ws * math.sin(lat_rad) * math.sin(decl)
+        + math.cos(lat_rad) * math.cos(decl) * math.sin(ws)
     )
+
+    # Solar radiation Rs from NASA POWER is already MJ/m2/day
+    Rs = weather['solar_rad']
+    Rso = (0.75 + 2e-5 * dynamic_elevation) * Ra
+    Rns = (1 - 0.23) * Rs
+
+    # Longwave radiation (needs es, ea)
+    tmean = (weather['temp_max'] + weather['temp_min']) / 2.0
+    es_tmax = 0.6108 * math.exp(17.27 * weather['temp_max'] / (weather['temp_max'] + 237.3))
+    es_tmin = 0.6108 * math.exp(17.27 * weather['temp_min'] / (weather['temp_min'] + 237.3))
+    es = (es_tmax + es_tmin) / 2.0
+    ea = es * (weather['rh'] / 100.0)
+    Rs_Rso = min(1.0, Rs / max(Rso, 1e-6))
+    Rnl = 4.903e-9 * (
+        ((weather['temp_max'] + 273.16) ** 4 + (weather['temp_min'] + 273.16) ** 4) / 2.0
+    ) * (0.34 - 0.14 * math.sqrt(max(ea, 1e-6))) * (1.35 * Rs_Rso - 0.35)
+    Rn = Rns - Rnl
+
+    # Psychrometric + slope of saturation vapour pressure
+    P = 101.3 * ((293 - 0.0065 * dynamic_elevation) / 293) ** 5.26
+    gamma = 0.000665 * P
+    delta = 4098 * (0.6108 * math.exp(17.27 * tmean / (tmean + 237.3))) / ((tmean + 237.3) ** 2)
+    u2 = weather['wind_speed']  # NASA WS2M is already 2 m wind speed
+
+    eto = (
+        (0.408 * delta * (Rn - 0.0))
+        + gamma * (900 / (tmean + 273)) * u2 * (es - ea)
+    ) / (delta + gamma * (1 + 0.34 * u2))
 
     # 5. Fetch trailing data (3-day and 7-day)
     cursor.execute("""
