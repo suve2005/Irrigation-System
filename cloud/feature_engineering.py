@@ -61,12 +61,6 @@ def fetch_spatial_api(lat, lon):
         # ISRIC SoilGrids v2.0, 0-5cm mean, Texture: clay loam (35.5% sand, 35.2% clay, 29.3% silt)
         return {"sand_pct": 35.5, "clay_pct": 35.2}
 
-# there are two functions called elevation. 
-# google api = more accurate, but is restrictive (limited fetches, expiary....)(kept if wanted to switch)
-# using 2nd one(opentopodata api)
-
-
-
 def fetch_elevation_api(lat, lon):  
     """Wrapper for OpenTopoData API (Free DEM alternative)."""
     url = f"https://api.opentopodata.org/v1/srtm90m?locations={lat},{lon}"
@@ -199,7 +193,8 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     current_moisture_row = cursor.fetchone()
     current_vwc = float(current_moisture_row['soil_moisture_vwc']) / 100 if current_moisture_row else float(crop_data['field_capacity'])
 
-    cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s", (target_date - timedelta(days=3),))
+    # fixed memory leak, buffer clears each time
+    cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s ORDER BY recorded_at DESC LIMIT 1", (target_date - timedelta(days=3),))
     old_moisture_row = cursor.fetchone()
     moisture_trend_3d = (current_vwc - (float(old_moisture_row['soil_moisture_vwc'])/100)) / 3 if old_moisture_row else 0.0
 
