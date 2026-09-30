@@ -6,35 +6,71 @@ import {
     TextInput,
     TouchableOpacity,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    Alert,
+    ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router'; // For navigation later
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../lib/supabase'; // Adjust path if necessary based on your folder structure
 
 const AuthScreen = () => {
     const router = useRouter();
 
-    // State to toggle between Login and Register modes
-    const [isLogin, setIsLogin] = useState(true);
-
-    // Form state
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
+    // Form and loading state
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleAuthenticate = () => {
-        if (isLogin) {
-            console.log("Logging in with:", email, password);
-            // After successful login, route to dashboard: router.replace('/dashboard')
-        } else {
-            console.log("Registering:", name, email, password);
-            // After successful registration, route to dashboard
+    const handleAuthenticate = async () => {
+        if (!username || !password) {
+            Alert.alert("Missing Fields", "Please enter your username and password.");
+            return;
+        }
+
+        setIsLoading(true);
+
+        try {
+            // Query the custom 'farmers' table we created earlier
+            const { data: farmer, error } = await supabase
+                .from('farmers')
+                .select('*')
+                .eq('username', username.trim().toLowerCase())
+                .single(); // .single() expects exactly one row
+
+            if (error || !farmer) {
+                // If the user doesn't exist, Supabase will throw a "Row not found" error
+                Alert.alert("Login Failed", "Invalid username or password.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Verify password (prototype plain-text check)
+            if (farmer.password !== password) {
+                Alert.alert("Login Failed", "Invalid username or password.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Success! Save the farmer ID to local storage so they stay logged in
+            await AsyncStorage.setItem('farmerId', farmer.id);
+
+            console.log("Logged in successfully!", farmer.username);
+
+            // Navigate to the Dashboard (uncomment when you build the dashboard page)
+            // router.replace('/dashboard');
+
+        } catch (error) {
+            Alert.alert("Error", "An unexpected error occurred while logging in.");
+            console.error("Login Error:", error);
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* KeyboardAvoidingView pushes the content up when the keyboard opens */}
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -54,29 +90,15 @@ const AuthScreen = () => {
 
                     {/* Form Section */}
                     <View style={styles.formContainer}>
-                        {/* Only show Name field if the user is registering */}
-                        {!isLogin && (
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Full Name</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="John Doe"
-                                    value={name}
-                                    onChangeText={setName}
-                                    autoCapitalize="words"
-                                />
-                            </View>
-                        )}
-
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Email Address</Text>
+                            <Text style={styles.inputLabel}>Username</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="farmer@smartagri.com"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
+                                placeholder="farmer_john"
+                                value={username}
+                                onChangeText={setUsername}
                                 autoCapitalize="none"
+                                autoCorrect={false}
                             />
                         </View>
 
@@ -91,12 +113,9 @@ const AuthScreen = () => {
                             />
                         </View>
 
-                        {/* Forgot Password Link (Only on Login) */}
-                        {isLogin && (
-                            <TouchableOpacity style={styles.forgotPassword}>
-                                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                            </TouchableOpacity>
-                        )}
+                        <TouchableOpacity style={styles.forgotPassword}>
+                            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Action Section */}
@@ -105,18 +124,21 @@ const AuthScreen = () => {
                             style={styles.primaryButton}
                             activeOpacity={0.8}
                             onPress={handleAuthenticate}
+                            disabled={isLoading}
                         >
-                            <Text style={styles.buttonText}>
-                                Sign In
-                            </Text>
+                            {isLoading ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.buttonText}>Sign In</Text>
+                            )}
                         </TouchableOpacity>
 
-                        {/* Toggle between Login and Register */}
+                        {/* Navigation to Registration */}
                         <View style={styles.toggleContainer}>
                             <Text style={styles.toggleText}>
-                                Don't have an account?
+                                Don't have an account?{" "}
                             </Text>
-                            <TouchableOpacity onPress={() => router.push('/Register/scan')}>
+                            <TouchableOpacity onPress={() => router.push('/register/scan')}>
                                 <Text style={styles.toggleLink}>
                                     Sign Up
                                 </Text>
@@ -143,7 +165,7 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: 24,
-        justifyContent: 'center', // Centers the form on the screen
+        justifyContent: 'center',
     },
     headerContainer: {
         marginBottom: 32,
@@ -151,7 +173,7 @@ const styles = StyleSheet.create({
     brandTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#22C55E', // Green accent
+        color: '#22C55E',
         textTransform: 'uppercase',
         letterSpacing: 1,
         marginBottom: 8,
@@ -212,6 +234,8 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
         marginBottom: 24,
+        minHeight: 56, // Prevents button from shrinking when loading spinner appears
+        justifyContent: 'center',
     },
     buttonText: {
         color: '#FFFFFF',
