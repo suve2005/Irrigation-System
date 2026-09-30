@@ -8,76 +8,145 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
-    Alert
+    Alert,
+    ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
-import { Ionicons } from '@expo/vector-icons'; // Built-in Expo icon library
-
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const DetailsScreen = () => {
     const router = useRouter();
     const { deviceId } = useLocalSearchParams();
 
     const [location, setLocation] = useState('');
-    const [username, setUsername] = useState('');
+    const [username, setUsername] = useState(''); // Reverted back to username
     const [password, setPassword] = useState('');
+    const [plantType, setPlantType] = useState('');
+    const [plantedDate, setPlantedDate] = useState('');
+    const [totalArea, setTotalArea] = useState('');
 
-    // Loading state for the GPS fetch
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [dateObject, setDateObject] = useState(new Date());
+
+    const onChangeDate = (event: any, selectedDate?: Date) => {
+        setShowDatePicker(false);
+        if (selectedDate) {
+            setDateObject(selectedDate);
+            const formatted = selectedDate.toISOString().split('T')[0];
+            setPlantedDate(formatted);
+        }
+    };
 
     const handleGetLocation = async () => {
         setIsFetchingLocation(true);
         try {
-            // 1. Ask the user for GPS hardware permission
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert("Permission Denied", "Please allow location access to automatically find your field.");
+                Alert.alert("Permission Denied", "Please allow location access.");
                 setIsFetchingLocation(false);
                 return;
             }
 
-            // 2. Fetch the exact GPS coordinates
             let locationData = await Location.getCurrentPositionAsync({});
             const { latitude, longitude } = locationData.coords;
 
-            // 3. Convert coordinates into a human-readable street address
             let address = await Location.reverseGeocodeAsync({ latitude, longitude });
 
             if (address.length > 0) {
                 const place = address[0];
-                // Formats it like "Main Street, Springfield"
                 const formattedName = [place.name, place.street, place.city].filter(Boolean).join(', ');
                 setLocation(formattedName);
             } else {
-                // Fallback to exact coordinates if the address lookup fails
                 setLocation(`Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`);
             }
         } catch (error) {
-            Alert.alert("Error", "Could not fetch your location. Please check your GPS signal.");
-            console.error(error);
+            Alert.alert("Error", "Could not fetch your location.");
         } finally {
             setIsFetchingLocation(false);
         }
     };
 
-    const handleCompleteSetup = () => {
-        console.log("Device:", deviceId);
-        console.log("Location:", location);
-        console.log("Username:", username);
-        console.log("Password:", password);
+    const handleCompleteSetup = async () => {
+        if (!username || !password || !location || !plantType || !plantedDate) {
+            Alert.alert("Missing Fields", "Please fill out all required information.");
+            return;
+        }
 
-        alert("Registration Complete! Your sensor is linked.");
+        setIsSubmitting(true);
+
+        try {
+            // 1. Create the User in our custom 'farmers' table
+            // We use .select().single() to immediately get the generated ID back
+            const { data: farmerData, error: farmerError } = await supabase
+                .from('farmers')
+                .insert({
+                    username: username.trim().toLowerCase(),
+                    password: password, // Note: Plain text for prototype. We will hash this in production.
+                })
+                .select()
+                .single();
+
+            if (farmerError) {
+                // Handle unique constraint error if username is taken
+                if (farmerError.code === '23505') {
+                    throw new Error("That username is already taken. Please choose another.");
+                }
+                throw farmerError;
+            }
+
+            const farmerId = farmerData.id;
+
+            // 2. Insert farm data into the 'farms' table linking it to the farmer
+            const { error: farmError } = await supabase.from('farms').insert({
+                farmer_id: farmerId,
+                sensor_serial: deviceId,
+                location: location,
+                plant_type: plantType,
+                planted_date: plantedDate,
+                farm_size: parseFloat(totalArea) || 0,
+            });
+
+            if (farmError) throw farmError;
+
+            // 3. Update the sensors table to mark this device as active
+            const { error: sensorUpdateError } = await supabase
+                .from('sensors')
+                .update({ status: 'active' })
+                .eq('serial_number', deviceId);
+
+            if (sensorUpdateError) console.warn("Sensor update failed:", sensorUpdateError);
+
+            Alert.alert("Success", "Registration Complete! Your sensor is linked.");
+
+            // 4. In the future, route to the login screen or dashboard here
+            // router.replace('/auth'); 
+
+        } catch (error) {
+            Alert.alert("Registration Failed", error.message || "An unexpected error occurred.");
+            console.error("Setup Error:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
                 style={styles.keyboardView}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-                <View style={styles.content}>
+                <ScrollView
+                    style={styles.content}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                >
 
                     <View style={styles.headerContainer}>
                         <Text style={styles.title}>Sensor Details</Text>
@@ -93,7 +162,6 @@ const DetailsScreen = () => {
 
                     <View style={styles.formContainer}>
 
-                        {/* Updated Location Input with GPS Button */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Farm / Field Location</Text>
                             <View style={styles.locationRow}>
@@ -116,6 +184,49 @@ const DetailsScreen = () => {
                                     )}
                                 </TouchableOpacity>
                             </View>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Plant Type</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g., Tomatoes"
+                                value={plantType}
+                                onChangeText={setPlantType}
+                            />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Planted Date</Text>
+                            <TouchableOpacity onPress={() => setShowDatePicker(true)} activeOpacity={0.8}>
+                                <View pointerEvents="none">
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="YYYY-MM-DD"
+                                        value={plantedDate}
+                                        editable={false}
+                                    />
+                                </View>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={dateObject}
+                                    mode="date"
+                                    display="default"
+                                    onChange={onChangeDate}
+                                />
+                            )}
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Total Area (Acres)</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g., 5"
+                                value={totalArea}
+                                onChangeText={setTotalArea}
+                                keyboardType="numeric"
+                            />
                         </View>
 
                         <View style={styles.inputGroup}>
@@ -142,15 +253,25 @@ const DetailsScreen = () => {
                     </View>
 
                     <View style={styles.actionContainer}>
-                        <TouchableOpacity style={styles.primaryButton} activeOpacity={0.8} onPress={handleCompleteSetup}>
-                            <Text style={styles.buttonText}>Complete Registration</Text>
+                        <TouchableOpacity
+                            style={styles.primaryButton}
+                            activeOpacity={0.8}
+                            onPress={handleCompleteSetup}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.buttonText}>Complete Registration</Text>
+                            )}
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => router.back()}>
+
+                        <TouchableOpacity onPress={() => router.back()} disabled={isSubmitting}>
                             <Text style={styles.cancelText}>Go Back</Text>
                         </TouchableOpacity>
                     </View>
 
-                </View>
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -159,74 +280,25 @@ const DetailsScreen = () => {
 export default DetailsScreen;
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8FAF5', padding: 2, paddingVertical: 2 },
+    container: { flex: 1, backgroundColor: '#F8FAF5' },
     keyboardView: { flex: 1 },
-    content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
+    content: { flex: 1 },
+    scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 40, paddingBottom: 60 },
     headerContainer: { marginBottom: 24 },
     title: { fontSize: 32, fontWeight: '800', color: '#166534', marginBottom: 8 },
     subtitle: { fontSize: 16, color: '#6B7280', lineHeight: 24 },
-    sensorBadge: {
-        backgroundColor: '#DCFCE7',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 32,
-        borderWidth: 1,
-        borderColor: '#86EFAC',
-    },
+    sensorBadge: { backgroundColor: '#DCFCE7', padding: 16, borderRadius: 12, marginBottom: 32, borderWidth: 1, borderColor: '#86EFAC' },
     sensorBadgeLabel: { fontSize: 12, color: '#166534', fontWeight: '600', textTransform: 'uppercase', marginBottom: 4 },
     sensorBadgeValue: { fontSize: 16, color: '#14532D', fontWeight: '700' },
     formContainer: { marginBottom: 32 },
     inputGroup: { marginBottom: 16 },
     inputLabel: { fontSize: 14, fontWeight: '600', color: '#4B5563', marginBottom: 8 },
-
-    // --- New Styles for the Location Row ---
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    input: {
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        color: '#1F2937',
-    },
-    locationInput: {
-        flex: 1, // Takes up remaining space
-        borderTopRightRadius: 0,
-        borderBottomRightRadius: 0,
-        borderRightWidth: 0, // Removes double border between input and button
-    },
-    locationButton: {
-        backgroundColor: '#22C55E',
-        paddingHorizontal: 16,
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderTopRightRadius: 12,
-        borderBottomRightRadius: 12,
-        borderWidth: 1,
-        borderColor: '#22C55E',
-    },
-    // ---------------------------------------
-
+    locationRow: { flexDirection: 'row', alignItems: 'stretch' },
+    input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: '#1F2937' },
+    locationInput: { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 },
+    locationButton: { backgroundColor: '#22C55E', paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', borderTopRightRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderColor: '#22C55E' },
     actionContainer: { width: '100%', alignItems: 'center' },
-    primaryButton: {
-        backgroundColor: '#22C55E',
-        paddingVertical: 16,
-        borderRadius: 16,
-        alignItems: 'center',
-        width: '100%',
-        shadowColor: '#22C55E',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-        marginBottom: 16,
-    },
+    primaryButton: { backgroundColor: '#22C55E', paddingVertical: 16, borderRadius: 16, alignItems: 'center', width: '100%', shadowColor: '#22C55E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, marginBottom: 16, minHeight: 56, justifyContent: 'center' },
     buttonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
     cancelText: { color: '#6B7280', fontSize: 16, fontWeight: '600', padding: 8 }
 });
