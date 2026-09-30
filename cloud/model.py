@@ -13,12 +13,15 @@ def run_inference_from_db(target_date):
     # Query the feature table, newest first, cap rows so TabPFN stays fast
     TABPFN_MAX_TRAINING_ROWS = 5000
 
-    # Query the comprehensive table containing all 28 features
+# Assuming we are strictly predicting for plot 1 right now
+    target_plot_id = 1 
+
     query = f"""
-        SELECT * FROM model_features_table
-        ORDER BY recorded_date DESC
-        LIMIT {TABPFN_MAX_TRAINING_ROWS}
-    """
+               SELECT * FROM model_features_table
+               WHERE plot_id = {target_plot_id} AND recorded_date <= '{target_date}'
+               ORDER BY recorded_date DESC
+               LIMIT {TABPFN_MAX_TRAINING_ROWS}
+           """
     df = pd.read_sql(query, db)
 
     # Re-sort ascending so X.iloc[-1] is still the latest row
@@ -47,8 +50,14 @@ def run_inference_from_db(target_date):
     # TabPFN is a zero-shot model, fitting configures the context
     classifier = TabPFNClassifier(device='cuda')
     classifier.fit(X_train, y_train)
-    
-    probability = classifier.predict_proba(X_today)[0][1]
+
+        # Catch the single-class crash
+    if len(classifier.classes_) == 1:
+            # If the model only knows 1 class, the probability of it being class 1 is 0.0
+            probability = 0.0 if classifier.classes_[0] == 0 else 1.0
+    else:
+            probability = classifier.predict_proba(X_today)[0][1]
+
     decision = 1 if probability > 0.7 else 0
     
 
