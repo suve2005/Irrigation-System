@@ -176,7 +176,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     ) / (delta + gamma * (1 + 0.34 * u2))
 
     # 5. Fetch trailing data (3-day and 7-day)
-   cursor.execute("""
+    cursor.execute("""
         SELECT SUM(precipitation) as rain_3d FROM (
             SELECT precipitation FROM weather_daily 
             WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3
