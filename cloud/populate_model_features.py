@@ -5,7 +5,7 @@ def populate_model_features():
     cursor = db.cursor()
 
     insert_query = """
-    INSERT INTO model_features_table
+    INSERT IGNORE INTO model_features_table
         (hour_of_day, soil_moisture_vwc, soil_temp, canopy_air_temp, canopy_rh,
          temp_max, temp_min, relative_humidity, wind_speed, solar_rad, precipitation,
          eto, eto_3d_mean, rain_3d_sum, rain_7d_sum, dap, kc, taw,

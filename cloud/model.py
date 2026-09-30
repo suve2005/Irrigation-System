@@ -48,7 +48,7 @@ def run_inference_from_db(target_date):
     X_today = X.iloc[[-1]] 
 
     # TabPFN is a zero-shot model, fitting configures the context
-    classifier = TabPFNClassifier(device='cuda')
+    classifier = TabPFNClassifier(device='cpu')
     classifier.fit(X_train, y_train)
 
         # Catch the single-class crash

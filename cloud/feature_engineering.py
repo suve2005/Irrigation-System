@@ -220,7 +220,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
 
     # 7. Depletion Calculations
     dr_measured = (float(crop_data['field_capacity']) - current_vwc) * float(crop_data['root_depth_zr']) * 1000
-    depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
+    depletion_ratio_measured = max(0.0, min(1.0, dr_measured / float(crop_data['taw'])))
 
     # changed old FAO-56 Bucket Model (Simulated) 
     cursor.execute("""
@@ -238,7 +238,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     dr_simulated = max(0.0, min(float(crop_data['taw']), last_dr - weather['precip'] + etc))
     depletion_ratio_simulated = dr_simulated / float(crop_data['taw'])
     
-    sim_vs_measured_deviation = depletion_ratio_measured - depletion_ratio_simulated
+    sim_vs_measured_deviation = max(-1.0, min(1.0, depletion_ratio_measured - depletion_ratio_simulated))
 
     # 8. Save to Database
     # depletion_ratio_simulated - kept it here for DB record, removed from model.py 
@@ -247,6 +247,17 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     (plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc, 
     moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON DUPLICATE KEY UPDATE
+        eto = VALUES(eto),
+        rain_3d_sum = VALUES(rain_3d_sum),
+        rain_7d_sum = VALUES(rain_7d_sum),
+        eto_3d_mean = VALUES(eto_3d_mean),
+        dap = VALUES(dap),
+        kc = VALUES(kc),
+        moisture_trend_3d = VALUES(moisture_trend_3d),
+        depletion_ratio_measured = VALUES(depletion_ratio_measured),
+        depletion_ratio_simulated = VALUES(depletion_ratio_simulated),
+        sim_vs_measured_deviation = VALUES(sim_vs_measured_deviation)
     """
     cursor.execute(insert_query, (
         plot_id, cycle_id, target_date, eto, rain_3d, rain_7d, eto_3d, dap, kc, 

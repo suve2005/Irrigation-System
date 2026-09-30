@@ -6,7 +6,7 @@ from database import get_db_connection
 from schemas import SensorPayload
 from feature_engineering import calculate_and_store_features
 from model import run_inference_from_db
-from populate_model_features import populate_model_features()
+from populate_model_features import populate_model_features
 
 app = FastAPI(title="Irrigation API")
 
