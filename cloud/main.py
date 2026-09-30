@@ -6,6 +6,7 @@ from database import get_db_connection
 from schemas import SensorPayload
 from feature_engineering import calculate_and_store_features
 from model import run_inference_from_db
+from populate_model_features import populate_model_features()
 
 app = FastAPI(title="Irrigation API")
 
@@ -30,6 +31,7 @@ def receive_sensor_data(payload: SensorPayload, background_tasks: BackgroundTask
 
 def trigger_pipeline(target_date: date):
     calculate_and_store_features(plot_id=1, cycle_id=1, target_date=target_date)
+    populate_model_features()
     run_inference_from_db(target_date=target_date)
 
 if __name__ == "__main__":
