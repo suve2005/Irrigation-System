@@ -59,7 +59,7 @@ const AuthScreen = () => {
             console.log("Logged in successfully!", farmer.username);
 
             // Navigate to the Dashboard (uncomment when you build the dashboard page)
-            // router.replace('/dashboard');
+            router.replace('../Dashboard');
 
         } catch (error) {
             Alert.alert("Error", "An unexpected error occurred while logging in.");
