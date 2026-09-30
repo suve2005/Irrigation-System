@@ -176,16 +176,28 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     ) / (delta + gamma * (1 + 0.34 * u2))
 
     # 5. Fetch trailing data (3-day and 7-day)
-    cursor.execute("""
-        SELECT SUM(precipitation) as rain_3d, AVG(eto) as eto_3d 
-        FROM (SELECT precipitation FROM weather_daily WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3) w,
-             (SELECT eto FROM daily_analytics WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3) e
-    """, (plot_id, plot_id))
-    trailing = cursor.fetchone()
-    rain_3d = trailing.get('rain_3d') or 0
-    eto_3d = trailing.get('eto_3d') or eto
+   cursor.execute("""
+        SELECT SUM(precipitation) as rain_3d FROM (
+            SELECT precipitation FROM weather_daily 
+            WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3
+        ) w
+    """, (plot_id,))
+    rain_3d = cursor.fetchone().get('rain_3d') or 0
 
-    cursor.execute("SELECT SUM(precipitation) as rain_7d FROM weather_daily WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 7", (plot_id,))
+    cursor.execute("""
+        SELECT AVG(eto) as eto_3d FROM (
+            SELECT eto FROM daily_analytics 
+            WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3
+        ) e
+    """, (plot_id,))
+    eto_3d = cursor.fetchone().get('eto_3d') or eto
+
+    cursor.execute("""
+        SELECT SUM(precipitation) AS rain_7d FROM (
+            SELECT precipitation FROM weather_daily
+            WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 7
+        ) t
+    """, (plot_id,))
     rain_7d = cursor.fetchone().get('rain_7d') or 0
 
     # Clamp values so they fit the existing DECIMAL(5,2) columns (max 999.99)
@@ -211,7 +223,11 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
 
     # changed old FAO-56 Bucket Model (Simulated) 
-    cursor.execute("SELECT depletion_ratio_simulated FROM daily_analytics WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 1", (plot_id,))
+    cursor.execute("""
+        SELECT depletion_ratio_simulated FROM daily_analytics 
+        WHERE plot_id=%s AND recorded_date < %s 
+        ORDER BY recorded_date DESC LIMIT 1
+    """, (plot_id, target_date))
     last_sim = cursor.fetchone()
     if last_sim and last_sim['depletion_ratio_simulated'] is not None:
         last_dr = float(last_sim['depletion_ratio_simulated']) * float(crop_data['taw'])
