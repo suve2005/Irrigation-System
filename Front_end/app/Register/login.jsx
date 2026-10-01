@@ -138,7 +138,7 @@ const AuthScreen = () => {
                             <Text style={styles.toggleText}>
                                 Don't have an account?{" "}
                             </Text>
-                            <TouchableOpacity onPress={() => router.push('/register/scan')}>
+                            <TouchableOpacity onPress={() => router.push('/Register/scan')}>
                                 <Text style={styles.toggleLink}>
                                     Sign Up
                                 </Text>

@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
 // Define your Python API URL (Use 10.0.2.2 for Android Emulator, or your computer's IP for a physical phone)
-const API_BASE_URL = 'http://10.0.2.2:8000';
+const API_BASE_URL = 'https://irrigation-system-n6d3.onrender.com';
 
 const DashboardScreen = () => {
     const router = useRouter();
@@ -29,7 +29,7 @@ const DashboardScreen = () => {
             try {
                 const farmerId = await AsyncStorage.getItem('farmerId');
                 if (!farmerId) {
-                    router.replace('/auth');
+                    router.replace('/Register/login');
                     return;
                 }
 

@@ -125,7 +125,7 @@ const DetailsScreen = () => {
             Alert.alert("Success", "Registration Complete! Your sensor is linked.");
 
             // 4. In the future, route to the login screen or dashboard here
-            // router.replace('/auth'); 
+            router.replace('/login');
 
         } catch (error) {
             Alert.alert("Registration Failed", error.message || "An unexpected error occurred.");
