@@ -11,6 +11,7 @@ import {
     ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase'; // Adjust path if necessary based on your folder structure
@@ -133,15 +134,19 @@ const AuthScreen = () => {
                             )}
                         </TouchableOpacity>
 
-                        {/* Navigation to Registration */}
-                        <View style={styles.toggleContainer}>
-                            <Text style={styles.toggleText}>
-                                Don't have an account?{" "}
-                            </Text>
-                            <TouchableOpacity onPress={() => router.push('/Register/scan')}>
-                                <Text style={styles.toggleLink}>
-                                    Sign Up
-                                </Text>
+                        {/* Navigation to Registration - Pushed to bottom */}
+                        <View style={styles.registerBottomContainer}>
+                            <View style={styles.arrowArtContainer}>
+                                <Ionicons name="arrow-down" size={24} color="#6B7280" />
+                                <Text style={styles.arrowText}>Register Here</Text>
+                                <Ionicons name="arrow-down" size={24} color="#6B7280" />
+                            </View>
+                            
+                            <TouchableOpacity 
+                                style={styles.registerButton}
+                                onPress={() => router.push('/Register/scan')}
+                            >
+                                <Text style={styles.registerButtonText}>Register</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -242,17 +247,36 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
     },
-    toggleContainer: {
+    registerBottomContainer: {
+        marginTop: 60, // pushes it down slightly or you can use flex: 1 if the parent container allows
+        alignItems: 'center',
+        paddingBottom: 20,
+    },
+    arrowArtContainer: {
         flexDirection: 'row',
-        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+        gap: 8,
     },
-    toggleText: {
+    arrowText: {
         color: '#6B7280',
-        fontSize: 15,
+        fontWeight: '600',
+        fontSize: 16,
+        letterSpacing: 1,
     },
-    toggleLink: {
-        color: '#166534',
-        fontSize: 15,
+    registerButton: {
+        backgroundColor: '#FFFFFF',
+        borderWidth: 2,
+        borderColor: '#22C55E',
+        paddingVertical: 16,
+        paddingHorizontal: 48,
+        borderRadius: 16,
+        width: '100%',
+        alignItems: 'center',
+    },
+    registerButtonText: {
+        color: '#22C55E',
+        fontSize: 18,
         fontWeight: '700',
     }
 });

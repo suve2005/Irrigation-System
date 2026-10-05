@@ -78,7 +78,7 @@ const DashboardScreen = () => {
 
     const handleLogout = async () => {
         await AsyncStorage.removeItem('farmerId');
-        router.replace('/auth');
+        router.replace('/Register/login');
     };
 
     if (isLoading) {
@@ -102,7 +102,7 @@ const DashboardScreen = () => {
                         </Text>
                     </View>
                     <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                        <Ionicons name="log-out-outline" size={24} color="#ef4444" />
+                        <Text style={{ color: "black" }}>Log out</Text>
                     </TouchableOpacity>
                 </View>
 
