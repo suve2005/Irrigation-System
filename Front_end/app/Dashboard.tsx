@@ -122,13 +122,21 @@ const DashboardScreen = () => {
                         <Text style={styles.cardSubtext}>Optimal: 20-25°C</Text>
                     </View>
 
-                    <View style={styles.card}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#BFDBFE' }]}>
-                            <Ionicons name="water-outline" size={28} color="#2563EB" />
+                    <View style={[styles.card, styles.moistureCard]}>
+                        <View style={styles.moistureContent}>
+                            <View style={[styles.iconContainer, { backgroundColor: '#BFDBFE' }]}>
+                                <Ionicons name="water-outline" size={28} color="#2563EB" />
+                            </View>
+                            <Text style={styles.cardTitle}>Moisture</Text>
+                            <Text style={styles.cardValue}>{sensorData.moisture}%</Text>
+                            <Text style={styles.cardSubtext}>Well watered</Text>
                         </View>
-                        <Text style={styles.cardTitle}>Moisture</Text>
-                        <Text style={styles.cardValue}>{sensorData.moisture}%</Text>
-                        <Text style={styles.cardSubtext}>Well watered</Text>
+                        <View style={styles.verticalBarBackground}>
+                            <View style={[
+                                styles.verticalBarFill, 
+                                { height: `${isNaN(Number(sensorData.moisture)) ? 0 : Math.min(100, Math.max(0, Number(sensorData.moisture)))}%` }
+                            ]} />
+                        </View>
                     </View>
 
                     <View style={styles.card}>
@@ -183,5 +191,9 @@ const styles = StyleSheet.create({
     cardValue: { fontSize: 24, fontWeight: '800', color: '#1F2937', marginBottom: 4 },
     cardSubtext: { fontSize: 12, color: '#22C55E', fontWeight: '500' },
     actionButton: { backgroundColor: '#2563EB', paddingVertical: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 8, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-    actionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' }
+    actionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+    moistureCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch' },
+    moistureContent: { flex: 1, justifyContent: 'space-between' },
+    verticalBarBackground: { width: 24, backgroundColor: '#DBEAFE', borderRadius: 12, justifyContent: 'flex-end', overflow: 'hidden', marginLeft: 12 },
+    verticalBarFill: { width: '100%', backgroundColor: '#2563EB' }
 });
