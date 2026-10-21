@@ -241,7 +241,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
 
     # 7. Depletion Calculations
     dr_measured = (float(crop_data['field_capacity']) - current_vwc) * float(crop_data['root_depth_zr']) * 1000
-    depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
+    depletion_ratio_measured = max(0.0, min(1.0, dr_measured / float(crop_data['taw'])))
 
     # changed old FAO-56 Bucket Model (Simulated) 
     cursor.execute("""
