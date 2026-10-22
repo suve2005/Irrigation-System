@@ -1,7 +1,28 @@
 from database import get_db_connection
 from datetime import date, timedelta
 import requests
-import pyfao56
+import math
+
+
+# Re-running a daily pipeline must refresh the existing daily summary.
+# The row alias exposes incoming values to MySQL's duplicate-key UPDATE clause.
+DAILY_ANALYTICS_UPSERT_SQL = """
+INSERT INTO daily_analytics
+(plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc,
+ moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS new
+ON DUPLICATE KEY UPDATE
+    eto = new.eto,
+    rain_3d_sum = new.rain_3d_sum,
+    rain_7d_sum = new.rain_7d_sum,
+    eto_3d_mean = new.eto_3d_mean,
+    dap = new.dap,
+    kc = new.kc,
+    moisture_trend_3d = new.moisture_trend_3d,
+    depletion_ratio_measured = new.depletion_ratio_measured,
+    depletion_ratio_simulated = new.depletion_ratio_simulated,
+    sim_vs_measured_deviation = new.sim_vs_measured_deviation
+"""
 
 def fetch_weather_api(lat, lon, target_date):
     """Wrapper for NASA POWER API."""
@@ -20,7 +41,7 @@ def fetch_weather_api(lat, lon, target_date):
             "precip": response['properties']['parameter']['PRECTOTCORR'][date_str]
         }
 
-        if weather["rh"] < 0 or weather["temp_max"] < -50 or weather["temp_min"] < -50:
+        if any(v <= -900 for v in weather.values()):
             raise ValueError("NASA returned -999 missing-data flag")
         return weather
     except Exception:
@@ -60,12 +81,6 @@ def fetch_spatial_api(lat, lon):
         # values from Damana, Ampara District, Sri Lanka. 
         # ISRIC SoilGrids v2.0, 0-5cm mean, Texture: clay loam (35.5% sand, 35.2% clay, 29.3% silt)
         return {"sand_pct": 35.5, "clay_pct": 35.2}
-
-# there are two functions called elevation. 
-# google api = more accurate, but is restrictive (limited fetches, expiary....)(kept if wanted to switch)
-# using 2nd one(opentopodata api)
-
-
 
 def fetch_elevation_api(lat, lon):  
     """Wrapper for OpenTopoData API (Free DEM alternative)."""
@@ -139,48 +154,106 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
     dap = (target_date - crop_data['planting_date']).days
     kc = calculate_kc(dap, crop_data)
 
-    # 4. Calculate ETo using pyfao56
+    # 4. Calculate ETo using FAO-56 Penman-Monteith (pure Python)
     doy = target_date.timetuple().tm_yday
-    rad = pyfao56.parameters.Rad(lat, dynamic_elevation)
-    eto = pyfao56.refet.eto_pm(
-        tmin=weather['temp_min'], tmax=weather['temp_max'],
-        ea=pyfao56.refet.ea_obs(weather['temp_min'], weather['temp_max'], weather['rh']),
-        uz=weather['wind_speed'], rs=weather['solar_rad'], 
-        ra=rad.ra(doy), 
-        lat=lat,
-        z=dynamic_elevation
+    lat_rad = math.radians(lat)
+    GSC = 0.0820  # MJ m-2 min-1
+
+    # Extraterrestrial radiation Ra (FAO-56 Eq. 21-25)
+    dr = 1 + 0.033 * math.cos(2 * math.pi / 365 * doy)
+    decl = 0.409 * math.sin(2 * math.pi / 365 * doy - 1.39)
+    ws = math.acos(max(-1.0, min(1.0, -math.tan(lat_rad) * math.tan(decl))))
+    Ra = (24 * 60 / math.pi) * GSC * dr * (
+        ws * math.sin(lat_rad) * math.sin(decl)
+        + math.cos(lat_rad) * math.cos(decl) * math.sin(ws)
     )
+
+    # Solar radiation Rs from NASA POWER is already MJ/m2/day
+    Rs = weather['solar_rad']
+    Rso = (0.75 + 2e-5 * dynamic_elevation) * Ra
+    Rns = (1 - 0.23) * Rs
+
+    # Longwave radiation (needs es, ea)
+    tmean = (weather['temp_max'] + weather['temp_min']) / 2.0
+    es_tmax = 0.6108 * math.exp(17.27 * weather['temp_max'] / (weather['temp_max'] + 237.3))
+    es_tmin = 0.6108 * math.exp(17.27 * weather['temp_min'] / (weather['temp_min'] + 237.3))
+    es = (es_tmax + es_tmin) / 2.0
+    ea = es * (weather['rh'] / 100.0)
+    Rs_Rso = min(1.0, Rs / max(Rso, 1e-6))
+    Rnl = 4.903e-9 * (
+        ((weather['temp_max'] + 273.16) ** 4 + (weather['temp_min'] + 273.16) ** 4) / 2.0
+    ) * (0.34 - 0.14 * math.sqrt(max(ea, 1e-6))) * (1.35 * Rs_Rso - 0.35)
+    Rn = Rns - Rnl
+
+    # Psychrometric + slope of saturation vapour pressure
+    P = 101.3 * ((293 - 0.0065 * dynamic_elevation) / 293) ** 5.26
+    gamma = 0.000665 * P
+    delta = 4098 * (0.6108 * math.exp(17.27 * tmean / (tmean + 237.3))) / ((tmean + 237.3) ** 2)
+    u2 = weather['wind_speed']  # NASA WS2M is already 2 m wind speed
+
+    eto = (
+        (0.408 * delta * (Rn - 0.0))
+        + gamma * (900 / (tmean + 273)) * u2 * (es - ea)
+    ) / (delta + gamma * (1 + 0.34 * u2))
 
     # 5. Fetch trailing data (3-day and 7-day)
     cursor.execute("""
-        SELECT SUM(precipitation) as rain_3d, AVG(eto) as eto_3d 
-        FROM (SELECT precipitation FROM weather_daily WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3) w,
-             (SELECT eto FROM daily_analytics WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3) e
-    """, (plot_id, plot_id))
-    trailing = cursor.fetchone()
-    rain_3d = trailing.get('rain_3d') or 0
-    eto_3d = trailing.get('eto_3d') or eto
+        SELECT SUM(precipitation) as rain_3d FROM (
+            SELECT precipitation FROM weather_daily 
+            WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3
+        ) w
+    """, (plot_id,))
+    rain_3d = cursor.fetchone().get('rain_3d') or 0
 
-    cursor.execute("SELECT SUM(precipitation) as rain_7d FROM weather_daily WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 7", (plot_id,))
+    cursor.execute("""
+        SELECT AVG(eto) as eto_3d FROM (
+            SELECT eto FROM daily_analytics 
+            WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 3
+        ) e
+    """, (plot_id,))
+    eto_3d = cursor.fetchone().get('eto_3d') or eto
+
+    cursor.execute("""
+        SELECT SUM(precipitation) AS rain_7d FROM (
+            SELECT precipitation FROM weather_daily
+            WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 7
+        ) t
+    """, (plot_id,))
     rain_7d = cursor.fetchone().get('rain_7d') or 0
+
+    # Clamp values so they fit the existing DECIMAL(5,2) columns (max 999.99)
+    rain_3d = max(0.0, min(float(rain_3d), 999.99))
+    rain_7d = max(0.0, min(float(rain_7d), 999.99))
+    eto     = max(0.0, min(float(eto),     999.99))
+    eto_3d  = max(0.0, min(float(eto_3d),  999.99))
 
     # 6. Fetch Sensor Data for Depletion & Trend
     cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s ORDER BY recorded_at DESC LIMIT 1", (target_date,))
     current_moisture_row = cursor.fetchone()
     current_vwc = float(current_moisture_row['soil_moisture_vwc']) / 100 if current_moisture_row else float(crop_data['field_capacity'])
 
-    cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s", (target_date - timedelta(days=3),))
+    # fixed memory leak, buffer clears each time
+    cursor.execute("SELECT soil_moisture_vwc FROM sensor_reading WHERE DATE(recorded_at) = %s ORDER BY recorded_at DESC LIMIT 1", (target_date - timedelta(days=3),))
     old_moisture_row = cursor.fetchone()
+
     moisture_trend_3d = (current_vwc - (float(old_moisture_row['soil_moisture_vwc'])/100)) / 3 if old_moisture_row else 0.0
+    moisture_trend_3d = max(-999.99, min(float(moisture_trend_3d), 999.99))
 
     # 7. Depletion Calculations
     dr_measured = (float(crop_data['field_capacity']) - current_vwc) * float(crop_data['root_depth_zr']) * 1000
-    depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
+    depletion_ratio_measured = max(0.0, min(1.0, dr_measured / float(crop_data['taw'])))
 
-    # FAO-56 Bucket Model (Simulated)
-    cursor.execute("SELECT depletion_ratio_simulated FROM daily_analytics WHERE plot_id=%s ORDER BY recorded_date DESC LIMIT 1", (plot_id,))
+    # changed old FAO-56 Bucket Model (Simulated) 
+    cursor.execute("""
+        SELECT depletion_ratio_simulated FROM daily_analytics 
+        WHERE plot_id=%s AND recorded_date < %s 
+        ORDER BY recorded_date DESC LIMIT 1
+    """, (plot_id, target_date))
     last_sim = cursor.fetchone()
-    last_dr = (float(last_sim['depletion_ratio_simulated']) * float(crop_data['taw'])) if last_sim else 0.0
+    if last_sim and last_sim['depletion_ratio_simulated'] is not None:
+        last_dr = float(last_sim['depletion_ratio_simulated']) * float(crop_data['taw'])
+    else:
+        last_dr = 0.0
     
     etc = kc * eto
     dr_simulated = max(0.0, min(float(crop_data['taw']), last_dr - weather['precip'] + etc))
@@ -190,13 +263,8 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
 
     # 8. Save to Database
     # depletion_ratio_simulated - kept it here for DB record, removed from model.py 
-    insert_query = """
-    INSERT INTO daily_analytics 
-    (plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc, 
-    moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    cursor.execute(insert_query, (
+    # Update in place so prediction rows keep referencing the same analytics_id.
+    cursor.execute(DAILY_ANALYTICS_UPSERT_SQL, (
         plot_id, cycle_id, target_date, eto, rain_3d, rain_7d, eto_3d, dap, kc, 
         moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation
     ))
