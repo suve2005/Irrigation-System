@@ -13,6 +13,8 @@ CREATE TABLE daily_analytics (
     depletion_ratio_measured DECIMAL(6,3),
     depletion_ratio_simulated DECIMAL(6,3),
     sim_vs_measured_deviation DECIMAL(6,3),
+    -- Required for the upsert to keep one summary per plot, crop cycle, and date.
+    UNIQUE KEY uq_plot_id_cycle_id_recorded_date (plot_id, cycle_id, recorded_date),
     FOREIGN KEY (plot_id) REFERENCES plot(plot_id),
     FOREIGN KEY (cycle_id) REFERENCES planting_record(cycle_id)
 );

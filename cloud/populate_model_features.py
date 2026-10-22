@@ -17,23 +17,28 @@ def populate_model_features():
         wd.temp_max, wd.temp_min, wd.relative_humidity, wd.wind_speed, wd.solar_rad, wd.precipitation,
         da.eto, da.eto_3d_mean, da.rain_3d_sum, da.rain_7d_sum, da.dap, da.kc, sp.taw,
         da.depletion_ratio_measured, da.depletion_ratio_simulated, da.sim_vs_measured_deviation,
-        da.moisture_trend_3d, n.sensor_depth_cm, c.root_depth_zr, c.depletion_p,
+        da.moisture_trend_3d, sr.sensor_depth_cm, c.root_depth_zr, c.depletion_p,
         sp.sand_pct, sp.clay_pct, p.elevation, DATE(sr.recorded_at), p.plot_id
-    FROM sensor_reading sr
-    JOIN node n            ON sr.node_id = n.node_id
-    JOIN plot p             ON n.plot_id = p.plot_id
+    FROM (
+        SELECT
+            sr.*,
+            n.plot_id,
+            n.sensor_depth_cm,
+            ROW_NUMBER() OVER (
+                PARTITION BY n.plot_id, DATE(sr.recorded_at), HOUR(sr.recorded_at)
+                ORDER BY sr.recorded_at DESC, sr.reading_id DESC
+            ) AS hour_rank
+        FROM sensor_reading AS sr
+        JOIN node AS n ON n.node_id = sr.node_id
+    ) AS sr
+    JOIN plot p             ON sr.plot_id = p.plot_id
     JOIN soil_profile sp    ON sp.plot_id = p.plot_id
     JOIN daily_analytics da ON da.plot_id = p.plot_id AND da.recorded_date = DATE(sr.recorded_at)
     JOIN weather_daily wd   ON wd.plot_id = p.plot_id AND wd.recorded_date = DATE(sr.recorded_at)
     JOIN planting_record pr ON pr.plot_id = p.plot_id AND pr.cycle_id = da.cycle_id
     JOIN crop c             ON c.crop_id = pr.crop_id
-    WHERE NOT EXISTS (
-        SELECT 1 FROM model_features_table mft
-        WHERE mft.plot_id = p.plot_id
-          AND mft.recorded_date = DATE(sr.recorded_at)
-          AND mft.hour_of_day = HOUR(sr.recorded_at)
-    )
-    """
+    WHERE sr.hour_rank = 1
+    ON DUPLICATE KEY UPDATE feature_id = model_features_table.feature_id
 
     cursor.execute(insert_query)
     db.commit()

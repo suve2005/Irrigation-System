@@ -3,6 +3,27 @@ from datetime import date, timedelta
 import requests
 import math
 
+
+# Re-running a daily pipeline must refresh the existing daily summary.
+# The row alias exposes incoming values to MySQL's duplicate-key UPDATE clause.
+DAILY_ANALYTICS_UPSERT_SQL = """
+INSERT INTO daily_analytics
+(plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc,
+ moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS new
+ON DUPLICATE KEY UPDATE
+    eto = new.eto,
+    rain_3d_sum = new.rain_3d_sum,
+    rain_7d_sum = new.rain_7d_sum,
+    eto_3d_mean = new.eto_3d_mean,
+    dap = new.dap,
+    kc = new.kc,
+    moisture_trend_3d = new.moisture_trend_3d,
+    depletion_ratio_measured = new.depletion_ratio_measured,
+    depletion_ratio_simulated = new.depletion_ratio_simulated,
+    sim_vs_measured_deviation = new.sim_vs_measured_deviation
+"""
+
 def fetch_weather_api(lat, lon, target_date):
     """Wrapper for NASA POWER API."""
     date_str = target_date.strftime("%Y%m%d")
@@ -220,7 +241,7 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
 
     # 7. Depletion Calculations
     dr_measured = (float(crop_data['field_capacity']) - current_vwc) * float(crop_data['root_depth_zr']) * 1000
-    depletion_ratio_measured = max(0.0, dr_measured / float(crop_data['taw']))
+    depletion_ratio_measured = max(0.0, min(1.0, dr_measured / float(crop_data['taw'])))
 
     # changed old FAO-56 Bucket Model (Simulated) 
     cursor.execute("""
@@ -242,13 +263,8 @@ def calculate_and_store_features(plot_id: int, cycle_id: int, target_date: date)
 
     # 8. Save to Database
     # depletion_ratio_simulated - kept it here for DB record, removed from model.py 
-    insert_query = """
-    INSERT INTO daily_analytics 
-    (plot_id, cycle_id, recorded_date, eto, rain_3d_sum, rain_7d_sum, eto_3d_mean, dap, kc, 
-    moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    cursor.execute(insert_query, (
+    # Update in place so prediction rows keep referencing the same analytics_id.
+    cursor.execute(DAILY_ANALYTICS_UPSERT_SQL, (
         plot_id, cycle_id, target_date, eto, rain_3d, rain_7d, eto_3d, dap, kc, 
         moisture_trend_3d, depletion_ratio_measured, depletion_ratio_simulated, sim_vs_measured_deviation
     ))
