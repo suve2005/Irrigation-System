@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
 // Define your Python API URL (Use 10.0.2.2 for Android Emulator, or your computer's IP for a physical phone)
-const API_BASE_URL = 'https://irrigation-system-n6d3.onrender.com';
+const API_BASE_URL = 'https://senior-suds-dispatch.ngrok-free.dev';
 
 const DashboardScreen = () => {
     const router = useRouter();
