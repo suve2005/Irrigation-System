@@ -31,7 +31,7 @@ const ScanQRScreen = () => {
         );
     }
 
-    const handleBarcodeScanned = ({ type, data }) => {
+    const handleBarcodeScanned = ({ data }: { type: string; data: string }) => {
         setScanned(true);
         setSensorId(data);
     };
