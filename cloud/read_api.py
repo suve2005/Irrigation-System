@@ -14,10 +14,20 @@ app.add_middleware(
 
 @app.get("/api/sensor/{serial_number}")
 def get_sensor_data(serial_number: str):
-    try:
-        node_id = int(serial_number)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Sensor ID must be a numeric node_id")
+    SENSOR_NODE_MAP = {
+        "SMART-AGRI-002": 1,
+    }
+
+    if serial_number in SENSOR_NODE_MAP:
+        node_id = SENSOR_NODE_MAP[serial_number]
+    else:
+        try:
+            node_id = int(serial_number)
+        except ValueError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No MySQL node mapping found for sensor: {serial_number}"
+            )
 
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
