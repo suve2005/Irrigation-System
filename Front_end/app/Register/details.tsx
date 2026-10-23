@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
     Text,
@@ -72,15 +72,69 @@ const DetailsScreen = () => {
         }
     };
 
+    const serialNumber = typeof deviceId === 'string' ? deviceId.trim() : Array.isArray(deviceId) ? deviceId[0] : '';
+
+    // Check device availability when entering the screen
+    useEffect(() => {
+        const verifyDeviceAvailability = async () => {
+            if (!serialNumber) return;
+
+            try {
+                const { data: existingFarm, error } = await supabase
+                    .from('farms')
+                    .select('id')
+                    .eq('sensor_serial', serialNumber)
+                    .maybeSingle();
+
+                if (error) {
+                    console.error("Error verifying sensor availability:", error);
+                    return;
+                }
+
+                if (existingFarm) {
+                    Alert.alert(
+                        "Sensor Already In Use",
+                        "This sensor serial number is already registered to another farm. You cannot register a new farm or farmer account with this device.",
+                        [{ text: "Go Back", onPress: () => router.replace('/Register/scan') }]
+                    );
+                }
+            } catch (err) {
+                console.error("Sensor pre-check failed:", err);
+            }
+        };
+
+        verifyDeviceAvailability();
+    }, [serialNumber]);
+
     const handleCompleteSetup = async () => {
         if (!username || !password || !location || !plantType || !plantedDate) {
             Alert.alert("Missing Fields", "Please fill out all required information.");
             return;
         }
 
+        if (!serialNumber) {
+            Alert.alert("Missing Sensor", "No sensor serial number provided. Please scan a QR code first.");
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
+            // Rule: Check if the serial number is already registered in another farm BEFORE creating farmer
+            const { data: existingFarm, error: checkFarmError } = await supabase
+                .from('farms')
+                .select('id')
+                .eq('sensor_serial', serialNumber)
+                .maybeSingle();
+
+            if (checkFarmError) {
+                throw new Error("Could not verify sensor availability. Please try again.");
+            }
+
+            if (existingFarm) {
+                throw new Error("This sensor serial number is already being used in another farm. Cannot create farm or farmer.");
+            }
+
             // 1. Create the User in our custom 'farmers' table
             // We use .select().single() to immediately get the generated ID back
             const { data: farmerData, error: farmerError } = await supabase
@@ -105,20 +159,28 @@ const DetailsScreen = () => {
             // 2. Insert farm data into the 'farms' table linking it to the farmer
             const { error: farmError } = await supabase.from('farms').insert({
                 farmer_id: farmerId,
-                sensor_serial: deviceId,
+                sensor_serial: serialNumber,
                 location: location,
                 plant_type: plantType,
                 planted_date: plantedDate,
                 farm_size: parseFloat(totalArea) || 0,
             });
 
-            if (farmError) throw farmError;
+            if (farmError) {
+                // Rollback created farmer if farm creation fails (prevent orphan farmer record)
+                await supabase.from('farmers').delete().eq('id', farmerId);
+
+                if (farmError.code === '23505') {
+                    throw new Error("This sensor serial number is already registered to another farm.");
+                }
+                throw farmError;
+            }
 
             // 3. Update the sensors table to mark this device as active
             const { error: sensorUpdateError } = await supabase
                 .from('sensors')
                 .update({ status: 'active' })
-                .eq('serial_number', deviceId);
+                .eq('serial_number', serialNumber);
 
             if (sensorUpdateError) console.warn("Sensor update failed:", sensorUpdateError);
 
