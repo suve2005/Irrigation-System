@@ -31,43 +31,66 @@ const ScanQRScreen = () => {
         );
     }
 
-    const handleBarcodeScanned = ({ type, data }) => {
+    const handleBarcodeScanned = ({ data }: { type: string; data: string }) => {
         setScanned(true);
         setSensorId(data);
     };
 
-    // New verification logic
+    // Sensor verification logic
     const handleVerifyAndContinue = async () => {
         setIsVerifying(true);
 
         try {
-            // Check Supabase for the scanned serial number
-            const { data, error } = await supabase
-                .from('sensors') // Change this if your table is named differently
+            // 1. Check Supabase to verify that the sensor exists in the system
+            const { data: sensorData, error: sensorError } = await supabase
+                .from('sensors')
                 .select('serial_number')
                 .eq('serial_number', sensorId)
-                .maybeSingle(); // maybeSingle returns null if not found, instead of throwing an error
+                .maybeSingle();
 
-            if (error) {
-                console.error("Database error:", error);
+            if (sensorError) {
+                console.error("Database error:", sensorError);
                 Alert.alert("Verification Error", "Could not connect to the database to verify the sensor.");
                 return;
             }
 
-            if (!data) {
+            if (!sensorData) {
                 // The serial number does not exist in the database
                 Alert.alert(
                     "Invalid Sensor",
                     "This QR code does not match any registered Smart Agri sensors in our system.",
-                    [{ text: "Try Again", onPress: () => setScanned(false) }] // Resets scanner
+                    [{ text: "Try Again", onPress: () => setScanned(false) }]
                 );
-            } else {
-                // Match found! Proceed to the next step
-                router.push({
-                    pathname: '/Register/details',
-                    params: { deviceId: sensorId }
-                });
+                return;
             }
+
+            // 2. Check if this sensor is already linked to another farm
+            const { data: existingFarm, error: farmCheckError } = await supabase
+                .from('farms')
+                .select('id')
+                .eq('sensor_serial', sensorId)
+                .maybeSingle();
+
+            if (farmCheckError) {
+                console.error("Database error checking existing farm:", farmCheckError);
+                Alert.alert("Verification Error", "Could not check sensor availability. Please try again.");
+                return;
+            }
+
+            if (existingFarm) {
+                Alert.alert(
+                    "Sensor Already Registered",
+                    "This sensor serial number is already in use by another farm. You cannot register a new farm or farmer account with an already registered sensor.",
+                    [{ text: "Scan Another", onPress: () => setScanned(false) }]
+                );
+                return;
+            }
+
+            // Valid & unassigned sensor! Proceed to registration details
+            router.push({
+                pathname: '/Register/details',
+                params: { deviceId: sensorId }
+            });
         } catch (err) {
             Alert.alert("Error", "An unexpected network error occurred.");
         } finally {

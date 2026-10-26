@@ -8,14 +8,20 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
-// Define your Python API URL (Use 10.0.2.2 for Android Emulator, or your computer's IP for a physical phone)
-const API_BASE_URL = 'https://senior-suds-dispatch.ngrok-free.dev';
+// Define your Python API URL (Uses EXPO_PUBLIC_API_URL or defaults to localhost/ngrok)
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://senior-suds-dispatch.ngrok-free.dev';
+
+interface FarmData {
+    location: string;
+    plant_type: string;
+    sensor_serial: string;
+}
 
 const DashboardScreen = () => {
     const router = useRouter();
 
     const [isLoading, setIsLoading] = useState(true);
-    const [farmData, setFarmData] = useState(null);
+    const [farmData, setFarmData] = useState<FarmData | null>(null);
     const [sensorData, setSensorData] = useState({
         temperature: '--',
         moisture: '--',
