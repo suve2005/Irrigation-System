@@ -38,7 +38,8 @@ def populate_model_features():
     JOIN planting_record pr ON pr.plot_id = p.plot_id AND pr.cycle_id = da.cycle_id
     JOIN crop c             ON c.crop_id = pr.crop_id
     WHERE sr.hour_rank = 1
-    ON DUPLICATE KEY UPDATE feature_id = model_features_table.feature_id
+    ON DUPLICATE KEY UPDATE plot_id = model_features_table.plot_id
+    """
 
     cursor.execute(insert_query)
     db.commit()
