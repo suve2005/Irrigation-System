@@ -139,7 +139,7 @@ const DashboardScreen = () => {
                         </View>
                         <View style={styles.verticalBarBackground}>
                             <View style={[
-                                styles.verticalBarFill, 
+                                styles.verticalBarFill,
                                 { height: `${isNaN(Number(sensorData.moisture)) ? 0 : Math.min(100, Math.max(0, Number(sensorData.moisture)))}%` }
                             ]} />
                         </View>
@@ -163,11 +163,6 @@ const DashboardScreen = () => {
                         <Text style={styles.cardSubtext}>Good condition</Text>
                     </View>
                 </View>
-
-                <TouchableOpacity style={styles.actionButton} activeOpacity={0.8}>
-                    <Ionicons name="water" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.actionButtonText}>Trigger Irrigation</Text>
-                </TouchableOpacity>
 
             </ScrollView>
         </SafeAreaView>
