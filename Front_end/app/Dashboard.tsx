@@ -96,6 +96,22 @@ const DashboardScreen = () => {
         );
     }
 
+    const moistureRaw = typeof sensorData.moisture === 'string'
+        ? sensorData.moisture.replace('%', '').trim()
+        : sensorData.moisture;
+    const moistureNum = Number(moistureRaw);
+    const hasValidMoisture = !isNaN(moistureNum);
+    const moisturePercent = hasValidMoisture ? Math.min(100, Math.max(0, moistureNum)) : 0;
+    const displayMoisture = !hasValidMoisture
+        ? '--'
+        : (moistureNum >= 100 ? '100' : `${sensorData.moisture}`);
+
+    const batteryRaw = typeof sensorData.battery === 'string'
+        ? sensorData.battery.replace('%', '').trim()
+        : sensorData.battery;
+    const batteryNum = Number(batteryRaw);
+    const displayBattery = !isNaN(batteryNum) && batteryNum >= 100 ? '100' : sensorData.battery;
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -123,9 +139,11 @@ const DashboardScreen = () => {
                         <View style={[styles.iconContainer, { backgroundColor: '#FEF08A' }]}>
                             <Ionicons name="thermometer-outline" size={28} color="#CA8A04" />
                         </View>
-                        <Text style={styles.cardTitle}>Soil Temp</Text>
-                        <Text style={styles.cardValue}>{sensorData.temperature}°C</Text>
-                        <Text style={styles.cardSubtext}>Optimal: 20-25°C</Text>
+                        <View style={styles.cardTextContainer}>
+                            <Text style={styles.cardTitle} numberOfLines={1}>Soil Temp</Text>
+                            <Text style={styles.cardValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{sensorData.temperature}°C</Text>
+                            <Text style={styles.cardSubtext} numberOfLines={1} ellipsizeMode="tail">Optimal: 20-25°C</Text>
+                        </View>
                     </View>
 
                     <View style={[styles.card, styles.moistureCard]}>
@@ -133,14 +151,29 @@ const DashboardScreen = () => {
                             <View style={[styles.iconContainer, { backgroundColor: '#BFDBFE' }]}>
                                 <Ionicons name="water-outline" size={28} color="#2563EB" />
                             </View>
-                            <Text style={styles.cardTitle}>Moisture</Text>
-                            <Text style={styles.cardValue}>{sensorData.moisture}%</Text>
-                            <Text style={styles.cardSubtext}>Well watered</Text>
+                            <View style={styles.cardTextContainer}>
+                                <Text style={styles.cardTitle} numberOfLines={1}>Moisture</Text>
+                                <Text
+                                    style={styles.cardValue}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.75}
+                                >
+                                    {displayMoisture}%
+                                </Text>
+                                <Text style={styles.cardSubtext} numberOfLines={1} ellipsizeMode="tail">Well watered</Text>
+                            </View>
                         </View>
                         <View style={styles.verticalBarBackground}>
                             <View style={[
                                 styles.verticalBarFill,
-                                { height: `${isNaN(Number(sensorData.moisture)) ? 0 : Math.min(100, Math.max(0, Number(sensorData.moisture)))}%` }
+                                {
+                                    height: `${moisturePercent}%`,
+                                    borderBottomLeftRadius: 9,
+                                    borderBottomRightRadius: 9,
+                                    borderTopLeftRadius: moisturePercent >= 95 ? 9 : 0,
+                                    borderTopRightRadius: moisturePercent >= 95 ? 9 : 0,
+                                }
                             ]} />
                         </View>
                     </View>
@@ -149,18 +182,22 @@ const DashboardScreen = () => {
                         <View style={[styles.iconContainer, { backgroundColor: '#E9D5FF' }]}>
                             <Ionicons name="cloud-outline" size={28} color="#9333EA" />
                         </View>
-                        <Text style={styles.cardTitle}>Air Humidity</Text>
-                        <Text style={styles.cardValue}>{sensorData.humidity}%</Text>
-                        <Text style={styles.cardSubtext}>Normal</Text>
+                        <View style={styles.cardTextContainer}>
+                            <Text style={styles.cardTitle} numberOfLines={1}>Air Humidity</Text>
+                            <Text style={styles.cardValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{sensorData.humidity}%</Text>
+                            <Text style={styles.cardSubtext} numberOfLines={1} ellipsizeMode="tail">Normal</Text>
+                        </View>
                     </View>
 
                     <View style={styles.card}>
                         <View style={[styles.iconContainer, { backgroundColor: '#BBF7D0' }]}>
                             <Ionicons name="battery-half-outline" size={28} color="#16A34A" />
                         </View>
-                        <Text style={styles.cardTitle}>Sensor Battery</Text>
-                        <Text style={styles.cardValue}>{(sensorData.battery)}%</Text>
-                        <Text style={styles.cardSubtext}>Good condition</Text>
+                        <View style={styles.cardTextContainer}>
+                            <Text style={styles.cardTitle} numberOfLines={1}>Sensor Battery</Text>
+                            <Text style={styles.cardValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{displayBattery}%</Text>
+                            <Text style={styles.cardSubtext} numberOfLines={1} ellipsizeMode="tail">Good condition</Text>
+                        </View>
                     </View>
                 </View>
 
@@ -171,7 +208,6 @@ const DashboardScreen = () => {
 
 export default DashboardScreen;
 
-// ... keep your existing styles ...
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAF5' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAF5' },
@@ -186,8 +222,22 @@ const styles = StyleSheet.create({
     statusText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', flex: 1 },
     cropText: { color: '#BBF7D0', fontSize: 14, fontWeight: '500' },
     gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    card: { width: '48%', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-    iconContainer: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+    card: {
+        width: '48%',
+        backgroundColor: '#FFFFFF',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 16,
+        minHeight: 168,
+        justifyContent: 'space-between',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    iconContainer: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+    cardTextContainer: { flexShrink: 1 },
     cardTitle: { fontSize: 14, color: '#6B7280', fontWeight: '600', marginBottom: 4 },
     cardValue: { fontSize: 24, fontWeight: '800', color: '#1F2937', marginBottom: 4 },
     cardSubtext: { fontSize: 12, color: '#22C55E', fontWeight: '500' },
@@ -195,6 +245,14 @@ const styles = StyleSheet.create({
     actionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
     moistureCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch' },
     moistureContent: { flex: 1, justifyContent: 'space-between' },
-    verticalBarBackground: { width: 24, backgroundColor: '#DBEAFE', borderRadius: 12, justifyContent: 'flex-end', overflow: 'hidden', marginLeft: 12 },
+    verticalBarBackground: {
+        width: 18,
+        backgroundColor: '#DBEAFE',
+        borderRadius: 9,
+        justifyContent: 'flex-end',
+        overflow: 'hidden',
+        marginLeft: 8,
+        alignSelf: 'stretch',
+    },
     verticalBarFill: { width: '100%', backgroundColor: '#2563EB' }
 });
